@@ -2,13 +2,14 @@
  * AI Companion Flow (Firebase Genkit)
  * Conversational AI companion for elderly patients
  * Features: daily check-ins, medication reminders, emotional support
- * Uses Gemini Flash for low-latency responses
+ * Uses Gemini 2.5 Flash for low-latency responses, with a context-aware
+ * fallback that reads real vitals when Gemini is unavailable.
  */
 
 import { genkit, z } from 'genkit';
 import { googleAI } from '@genkit-ai/googleai';
 import { healthMemory } from '../rag/healthMemoryService';
-import { ConversationMessage } from '../types/health.types';
+import { ConversationMessage, HealthReading, Patient } from '../types/health.types';
 import { callGeminiJSON } from '../lib/gemini';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -30,6 +31,16 @@ const CompanionOutputSchema = z.object({
   flagReason: z.string().optional(),
 });
 
+type CompanionOutput = z.infer<typeof CompanionOutputSchema>;
+
+// Deterministic hash used to vary fallback phrasing without RNG — same
+// (patient, message) pair always picks the same variant, so it feels stable.
+function hashPick<T>(seed: string, list: T[]): T {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return list[Math.abs(h) % list.length];
+}
+
 export const companionFlow = ai.defineFlow(
   {
     name: 'aiCompanion',
@@ -40,6 +51,7 @@ export const companionFlow = ai.defineFlow(
     const patient = healthMemory.getPatient(input.patientId);
     const healthContext = healthMemory.retrieveHealthContext(input.patientId);
     const conversationHistory = healthMemory.getConversationHistory(input.patientId, 8) ?? [];
+    const latestReading = healthMemory.getLatestReadings(input.patientId, 1)[0];
 
     const firstName = patient ? patient.name.split(' ')[0] : (input.language === 'bm' ? 'Kawan' : 'Friend');
     const currentHour = new Date().getHours();
@@ -47,65 +59,68 @@ export const companionFlow = ai.defineFlow(
 
     const isBM = input.language === 'bm';
 
-    const systemPrompt = `You are CareSphere AI, a healthcare companion for elderly Malaysian patients, aligned with Malaysian Ministry of Health (MOH) guidelines.
+    // ── Build a compact "live vitals" snippet the model is forced to cite ────
+    const vitalsLine = latestReading
+      ? `HR ${latestReading.heartRate}bpm · BP ${latestReading.bloodPressure.systolic}/${latestReading.bloodPressure.diastolic} · SpO₂ ${latestReading.oxygenSaturation}% · Temp ${latestReading.temperature}°C · Sleep ${latestReading.sleepHours}h`
+      : 'No vitals on record yet.';
 
-RETRIEVED PATIENT HEALTH CONTEXT (RAG):
+    const systemPrompt = `You are CareSphere AI — a warm, specific healthcare companion for elderly Malaysian patients. You follow Malaysian MOH guidelines and speak like a caring family member, not a script.
+
+═══════════════════════════════════════════
+PATIENT: ${firstName} (${patient?.age ?? '?'}y, ${patient?.gender ?? 'unknown'})
+CONDITIONS: ${patient?.conditions.join(', ') || 'None'}
+MEDICATIONS: ${patient?.medications.join(', ') || 'None'}
+LATEST VITALS: ${vitalsLine}
+TIME: ${isBM ? (greeting === 'morning' ? 'Pagi' : greeting === 'afternoon' ? 'Tengah hari' : 'Malam') : `${greeting[0].toUpperCase() + greeting.slice(1)}`}
+═══════════════════════════════════════════
+
+FULL RAG CONTEXT:
 ${healthContext}
 
-YOUR ROLE & BEHAVIOUR:
-- Warm, patient, empathetic — speak like a caring family member, NOT a robot
-- Use simple, clear language appropriate for elderly users
-- ${isBM
-  ? 'Respond ENTIRELY in Bahasa Malaysia. Bahasa mudah dan mesra. Boleh campur sedikit Inggeris semula jadi ("okay", "check-up", "follow-up"). Sapaan: "Pak Cik", "Mak Cik", atau nama pertama.'
-  : 'Respond in English. Mix in occasional Malay flavour naturally ("okay lah", "no worries lah", "take care ya").'}
-- Address the patient by first name: ${firstName}
-- NEVER repeat the same generic greeting — be contextually specific to this conversation
-- Celebrate wins, but act decisively on health concerns
-- You are an AGENTIC AI: take autonomous action when needed (alert caregiver, recommend clinic, escalate)
+RECENT CONVERSATION (most recent last):
+${conversationHistory.length === 0 ? '(this is the first message)' : conversationHistory.map((m) => `${m.role === 'user' ? firstName : 'You'}: ${m.content}`).join('\n')}
 
-LANGUAGE: ${isBM ? 'BAHASA MALAYSIA penuh' : 'ENGLISH with Malay flavour'}
-SESSION: ${input.sessionType}
-GREETING: ${isBM ? (greeting === 'morning' ? 'Selamat pagi' : greeting === 'afternoon' ? 'Selamat tengah hari' : 'Selamat malam') : `Good ${greeting}`}
+${firstName} just said: "${input.userMessage}"
 
-${input.sessionType === 'medication_reminder'
-  ? `MEDICATION MODE: Medications = ${patient?.medications.join(', ')}. Gently confirm taken. Note any side effects mentioned.`
-  : ''}
-${input.sessionType === 'daily_checkin'
-  ? `DAILY CHECK-IN MODE: Ask how they feel, pain/discomfort, sleep quality, appetite, mood. Conversational, not clinical.`
-  : ''}
-${input.sessionType === 'emotional_support'
-  ? `EMOTIONAL SUPPORT MODE: Listen actively, validate feelings, offer comfort. Don't rush to solutions. Suggest calling family if lonely.`
-  : ''}
+═══════════════════════════════════════════
+HOW TO REPLY — READ CAREFULLY:
 
-CONVERSATION HISTORY (last 8 turns):
-${conversationHistory.map((m) => `${m.role === 'user' ? firstName : 'CareSphere'}: ${m.content}`).join('\n')}
+1. BE SPECIFIC, NOT GENERIC. You MUST reference at least ONE concrete detail from the context above — a real vital number, a specific condition name, a medication, or something they said earlier. Example good: "Your BP this morning was 148/94 lah, that's a bit higher than usual for you." Example BAD: "Thank you for telling me about this."
 
-CURRENT MESSAGE FROM ${firstName}: "${input.userMessage}"
+2. ❌ BANNED PHRASES (do not use, ever):
+   - "Thank you for telling me about this"
+   - "I'm here for you anytime"
+   - "What you're feeling might be related to your existing health condition"
+   - "Good to hear from you"
+   - "How are you feeling today?" as an opener
+   - Any phrase that would fit ANY patient — if it could be copy-pasted to another person, rewrite it.
 
-RESPONSE STRUCTURE — your "response" field MUST include these 4 elements naturally (weave them into a single warm message, not a numbered list):
+3. SHORT & HUMAN. 2–4 sentences max for casual messages ("hey", "good morning"). Up to 6 sentences for symptom reports. Never lecture.
 
-1. POSSIBLE CAUSE — briefly explain the likely reason for their concern, based on their health history and what they described (e.g., "This could be related to your blood pressure medication…")
-2. SIMPLE ADVICE — 1–2 specific, actionable things they can do RIGHT NOW (drink water, rest, check BP, take their medication, call someone)
-3. KLINIK KESIHATAN GUIDANCE — if warranted, advise whether to visit their nearest Klinik Kesihatan or Hospital Kerajaan. For non-urgent concerns say "if this continues for more than X days, see your Klinik Kesihatan". For urgent, say to go TODAY.
-4. CAREGIVER ALERT (if serious) — if symptoms are concerning, mention you are alerting their caregiver so they can check in
+4. ${isBM
+  ? 'Reply in Bahasa Malaysia (campur sikit English natural — "okay", "check-up"). Sapaan: nama pertama, atau "Pak Cik"/"Mak Cik".'
+  : 'Reply in English with natural Malaysian flavour ("lah", "ya", "okay"). Do not overdo it — one or two per message is enough.'}
 
-HIGH RISK TRIGGERS (flag immediately + set flaggedForCaregiver=true):
-chest pain, cannot breathe, severe dizziness, fall/fell, stroke symptoms, confusion, seizure, unconscious, severe bleeding, choking, fainting
+5. WHEN THEY REPORT A SYMPTOM, your reply should naturally include:
+   - A plausible cause GROUNDED IN THEIR VITALS OR CONDITIONS (not generic)
+   - One concrete thing to do right now
+   - Klinik Kesihatan guidance only if warranted (don't force it into every reply)
+   - Caregiver alert mention ONLY if the symptom is serious
+
+6. WHEN THEY JUST SAY HI, greet them back warmly, reference something personal (their latest vitals trend, a medication they should take now, the time of day), and invite them to share. Do NOT launch into a clinical speech.
+
+HIGH RISK TRIGGERS — set flaggedForCaregiver=true and sentiment="urgent":
+chest pain, can't breathe, severe dizziness, fall/fell, stroke symptoms, confusion, seizure, unconscious, severe bleeding, choking, fainting
 BM: sakit dada, sesak nafas, pening teruk, jatuh, strok, keliru, pengsan, pitam, berdarah teruk, tercekik, kejang
 
-AGENTIC ACTIONS to take based on risk level:
-- LOW risk: reassure, give self-care advice, suggest next scheduled check-up
-- MEDIUM risk: advise Klinik Kesihatan visit within 1–2 days, remind about medications
-- HIGH risk: emergency escalation — 999 or nearest A&E, MUST flag caregiver
-
-Respond ONLY with valid JSON (no markdown, no code blocks):
+Respond with ONLY valid JSON. No markdown, no code blocks, no preamble:
 {
-  "response": "<warm, specific, human response weaving all 4 elements above — do NOT be generic>",
+  "response": "<2–6 sentences, specific to ${firstName}, no banned phrases>",
   "sentiment": "supportive|informative|urgent|reassuring",
-  "followUpSuggestions": ["<specific suggestion 1>", "<specific suggestion 2>", "<specific suggestion 3>"],
-  "medicationReminders": ["<med name + time if applicable>"],
+  "followUpSuggestions": ["<specific>", "<specific>", "<specific>"],
+  "medicationReminders": [${patient?.medications.length ? '"<med + time>"' : ''}],
   "flaggedForCaregiver": <true|false>,
-  "flagReason": "<brief clinical reason if flagged, else omit>"
+  "flagReason": "<only if flagged>"
 }`;
 
     const storeMessage = (role: 'user' | 'model', content: string) => {
@@ -122,9 +137,9 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
     storeMessage('user', input.userMessage);
 
     // callGeminiJSON handles retry ×3, exponential backoff, safe JSON parsing — never throws
-    const geminiResult = await callGeminiJSON<z.infer<typeof CompanionOutputSchema>>(
+    const geminiResult = await callGeminiJSON<CompanionOutput>(
       systemPrompt,
-      { temperature: 0.7, maxOutputTokens: 1024 }
+      { temperature: 0.85, maxOutputTokens: 768 }
     );
 
     if (geminiResult) {
@@ -134,95 +149,230 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
         console.log(`[companionFlow] Gemini 2.5 Flash ✓ sentiment=${result.sentiment} flagged=${result.flaggedForCaregiver}`);
         return result;
       } catch (parseErr) {
-        console.warn('[companionFlow] Gemini result failed schema validation, using fallback');
+        console.warn('[companionFlow] Gemini result failed schema validation, using smart fallback');
       }
     } else {
-      console.log('[companionFlow] Gemini unavailable — using fallback response');
+      console.log('[companionFlow] Gemini unavailable — using smart context-aware fallback');
     }
 
-    const fallbackResponse = getFallbackResponse(input.userMessage, firstName, patient?.medications || [], input.language);
+    const fallbackResponse = getSmartFallback({
+      message: input.userMessage,
+      firstName,
+      patient,
+      latestReading,
+      conversationHistory,
+      greeting,
+      language: input.language,
+    });
     storeMessage('model', fallbackResponse.response);
     return fallbackResponse;
   }
 );
 
-function getFallbackResponse(
-  message: string,
-  firstName: string,
-  medications: string[],
-  language: 'en' | 'bm' = 'en'
-): z.infer<typeof CompanionOutputSchema> {
-  const lowerMsg = message.toLowerCase();
+// ═════════════════════════════════════════════════════════════════════════════
+// SMART FALLBACK — runs when Gemini is unavailable.
+// Uses real vitals + conditions + time-of-day + conversation history to build
+// a response that feels personal, not template-y. Varied phrasing via hashPick.
+// ═════════════════════════════════════════════════════════════════════════════
 
-  // Urgent symptom keywords — English + Bahasa Malaysia
-  const urgentKeywords = [
-    // English
-    'chest pain', "can't breathe", 'cannot breathe', 'dizzy', 'fall', 'fell',
-    'heart', 'stroke', 'numb', 'confusion', 'confused', 'seizure', 'unconscious',
-    'severe bleeding', 'choking', 'faint', 'collapsed',
-    // Bahasa Malaysia
-    'sakit dada', 'sesak nafas', 'pening', 'jatuh', 'tercekik', 'pengsan',
-    'strok', 'kebas', 'kejang', 'pitam', 'berdarah teruk',
-  ];
-  const isUrgent = urgentKeywords.some((kw) => lowerMsg.includes(kw));
+interface FallbackCtx {
+  message: string;
+  firstName: string;
+  patient?: Patient;
+  latestReading?: HealthReading;
+  conversationHistory: ConversationMessage[];
+  greeting: 'morning' | 'afternoon' | 'evening';
+  language: 'en' | 'bm';
+}
 
+function getSmartFallback(ctx: FallbackCtx): CompanionOutput {
+  const { message, firstName, patient, latestReading, greeting, language } = ctx;
   const isBM = language === 'bm';
+  const lowerMsg = message.toLowerCase().trim();
+  const seed = `${firstName}:${lowerMsg}:${greeting}`;
 
-  // ── HIGH RISK: emergency response ──────────────────────────────────────────
-  if (isUrgent) {
+  // ── Latest-vital observations used to anchor responses in real data ─────
+  const vitals = latestReading;
+  const bpObservation = vitals
+    ? (() => {
+        const sys = vitals.bloodPressure.systolic;
+        const dia = vitals.bloodPressure.diastolic;
+        if (sys >= 160 || dia >= 100) {
+          return isBM
+            ? `tekanan darah terakhir anda ${sys}/${dia} — itu agak tinggi`
+            : `your last BP was ${sys}/${dia} — that's on the higher side`;
+        }
+        if (sys >= 140 || dia >= 90) {
+          return isBM
+            ? `BP terakhir anda ${sys}/${dia}, sikit tinggi dari biasa`
+            : `your BP was ${sys}/${dia} — a little above normal`;
+        }
+        if (sys < 100) {
+          return isBM
+            ? `BP anda ${sys}/${dia} — agak rendah, jangan bangun terlalu cepat`
+            : `your BP was ${sys}/${dia} — a bit low, so don't stand up too fast`;
+        }
+        return isBM
+          ? `BP terakhir anda ${sys}/${dia} — okay`
+          : `your last BP reading was ${sys}/${dia} — looking stable`;
+      })()
+    : null;
+
+  const hrObservation = vitals
+    ? vitals.heartRate > 100
+      ? isBM ? `nadi ${vitals.heartRate}bpm — sedikit laju` : `heart rate ${vitals.heartRate}bpm — a bit fast`
+      : vitals.heartRate < 55
+      ? isBM ? `nadi ${vitals.heartRate}bpm — perlahan sikit` : `heart rate ${vitals.heartRate}bpm — on the slow side`
+      : null
+    : null;
+
+  const o2Observation = vitals && vitals.oxygenSaturation < 94
+    ? isBM
+      ? `SpO₂ ${vitals.oxygenSaturation}% — rendah sikit`
+      : `your oxygen was ${vitals.oxygenSaturation}% — a touch low`
+    : null;
+
+  const sleepObservation = vitals && vitals.sleepHours < 5
+    ? isBM
+      ? `tidur hanya ${vitals.sleepHours}jam — kurang rehat`
+      : `you only slept ${vitals.sleepHours}h last night — that's not enough rest`
+    : null;
+
+  const primaryCondition = patient?.conditions[0];
+  const firstMed = patient?.medications[0];
+  const timeGreet = isBM
+    ? greeting === 'morning' ? 'Selamat pagi' : greeting === 'afternoon' ? 'Selamat tengah hari' : 'Selamat malam'
+    : greeting === 'morning' ? 'Morning' : greeting === 'afternoon' ? 'Afternoon' : 'Evening';
+
+  // ── 1. URGENT SYMPTOMS ──────────────────────────────────────────────────
+  const urgentKeywords = [
+    'chest pain', "can't breathe", 'cannot breathe', 'severe dizz', 'fall', 'fell', 'stroke',
+    'numb on one side', 'seizure', 'unconscious', 'choking', 'faint', 'collapsed',
+    'sakit dada', 'sesak nafas', 'pening teruk', 'jatuh', 'tercekik', 'pengsan', 'strok', 'kejang',
+  ];
+  if (urgentKeywords.some((kw) => lowerMsg.includes(kw))) {
+    const anchor = bpObservation || hrObservation || o2Observation;
     return {
       response: isBM
-        ? `${firstName}, saya sangat bimbang dengan keadaan anda sekarang. Gejala yang anda sebut boleh menjadi tanda kecemasan perubatan. Jangan tunggu — sila duduk atau berbaring di tempat yang selamat, hubungi 999 atau minta seseorang bawa anda ke Jabatan Kecemasan Hospital Kerajaan terdekat dengan segera. Saya telah menghantar amaran kepada penjaga anda supaya mereka boleh bersama anda secepat mungkin. Jangan berseorangan ya.`
-        : `${firstName}, I'm really concerned about what you've described — these symptoms can sometimes be a sign of a medical emergency. Please sit or lie down somewhere safe right now. Call 999 or have someone take you to the nearest Hospital Kerajaan A&E immediately — don't wait. I've already alerted your caregiver so they're on their way to check on you. You're not alone in this.`,
+        ? `${firstName}, ini serius — ${anchor ? anchor + ', dan ' : ''}gejala yang anda sebut boleh jadi kecemasan. Duduk atau baring di tempat selamat sekarang, hubungi 999 atau minta sesiapa hantar ke Jabatan Kecemasan Hospital Kerajaan terdekat. Saya sudah hantar amaran kepada ${patient?.caregiver.name || 'penjaga anda'}.`
+        : `${firstName}, this is serious — ${anchor ? anchor + ', and ' : ''}what you're describing can be an emergency. Sit or lie down somewhere safe right now, call 999, or get someone to take you to the nearest Hospital Kerajaan A&E. I've already alerted ${patient?.caregiver.name || 'your caregiver'} — they're on the way.`,
       sentiment: 'urgent',
       followUpSuggestions: isBM
-        ? ['Hubungi 999 sekarang', 'Minta seseorang menemani anda', 'Duduk atau berbaring dengan selamat']
-        : ['Call 999 immediately', 'Ask someone to stay with you', 'Sit or lie down safely'],
+        ? ['Hubungi 999', `Hubungi ${patient?.caregiver.name || 'penjaga'}`, 'Jangan berseorangan']
+        : ['Call 999 now', `Call ${patient?.caregiver.name || 'your caregiver'}`, 'Stay with someone'],
       medicationReminders: [],
       flaggedForCaregiver: true,
       flagReason: isBM
-        ? 'Gejala kecemasan yang berpotensi disebut — tindakan segera diperlukan'
-        : 'Potential emergency symptoms mentioned — immediate action required',
+        ? `Gejala kecemasan disebut: ${message.substring(0, 80)}`
+        : `Emergency symptoms reported: ${message.substring(0, 80)}`,
     };
   }
 
-  // ── Symptom keywords that warrant Klinik Kesihatan advice ───────────────────
-  const clinicKeywords = [
-    'headache', 'sakit kepala', 'tired', 'penat', 'lelah', 'cough', 'batuk',
-    'fever', 'demam', 'pain', 'sakit', 'swollen', 'bengkak', 'nausea', 'loya',
-    'vomit', 'muntah', 'diarrhoea', 'cirit', 'blood pressure', 'tekanan darah',
-    'sugar', 'gula', 'glucose', 'glucos', 'breathless', 'shortness',
-  ];
-  const needsClinicAdvice = clinicKeywords.some((kw) => lowerMsg.includes(kw));
-
-  if (needsClinicAdvice) {
+  // ── 2. TIREDNESS / FATIGUE — the failure case from user's screenshot ────
+  if (/\btired\b|\bfatigue\b|\bexhaust|\bweak\b|\bno energy\b|\bpenat\b|\blelah\b|\blemah\b/i.test(message)) {
+    const anchors = [sleepObservation, bpObservation, hrObservation].filter(Boolean) as string[];
+    const anchor = anchors[0];
+    const variants = isBM
+      ? [
+          `${firstName}, penat tu ada puncanya — ${anchor || `mungkin kerana ${primaryCondition || 'keadaan kesihatan anda'}`}. Cuba minum segelas air, duduk rehat 15 minit, dan ${firstMed ? `pastikan ${firstMed} sudah diambil` : 'makan sikit walaupun tak lapar'}. Kalau masih penat esok, pergi Klinik Kesihatan untuk check.`,
+          `${firstName}, penat macam ni — saya perhatikan ${anchor || `${primaryCondition || 'keadaan kesihatan'} anda`}. Rehat dulu, minum air, jangan paksa diri. ${firstMed ? `Dah ambil ${firstMed} ke belum hari ni?` : 'Jaga makanan dan air minum ya.'}`,
+        ]
+      : [
+          `${firstName}, that tiredness isn't random — ${anchor || `it can come from ${primaryCondition || 'your condition'}`}. Sit down for 15 min, drink a glass of water, and ${firstMed ? `make sure you've taken your ${firstMed} today` : 'eat something small even if you don\'t feel hungry'}. If you still feel this tired tomorrow, go to your Klinik Kesihatan for a check.`,
+          `${firstName}, I hear you — ${anchor || `with your ${primaryCondition || 'health history'} this happens sometimes`}. Rest first, have some water, don't push yourself. ${firstMed ? `Have you taken your ${firstMed} today?` : 'Look after your meals and water today, ya.'}`,
+          `${firstName}, let's slow down. ${anchor ? `I see ${anchor}, so that might be why.` : 'Tiredness like this deserves a pause.'} Lie down for a bit, sip some water, and ${firstMed ? `if ${firstMed} is due, take it now.` : 'let me know if it gets worse.'}`,
+        ];
     return {
-      response: isBM
-        ? `${firstName}, terima kasih kerana memberitahu saya. Gejala yang anda rasa mungkin berkaitan dengan keadaan kesihatan anda yang sedia ada. Untuk masa ini, cuba rehat yang cukup, minum air yang banyak, dan pastikan anda ambil ubat seperti yang ditetapkan. Jika gejala ini berterusan lebih dari dua hari atau semakin teruk, sila pergi ke Klinik Kesihatan berhampiran anda — mereka boleh bantu dengan pemeriksaan lanjut tanpa perlu bayaran yang tinggi. Saya juga telah mengemas kini rekod kesihatan anda supaya penjaga anda tahu tentang keadaan ini.`
-        : `${firstName}, thank you for telling me about this. What you're feeling might be related to your existing health condition — it's good that you noticed it. For now, try to rest well, drink plenty of water, and make sure you take your medications as prescribed. If this symptom continues for more than two days or gets worse, please visit your nearest Klinik Kesihatan — they can do a proper check-up at low cost. I've updated your health record so your caregiver is aware, lah.`,
+      response: hashPick(seed, variants),
       sentiment: 'informative',
       followUpSuggestions: isBM
-        ? ['Pergi Klinik Kesihatan jika tidak baik dalam 2 hari', 'Minum air yang banyak dan berehat', 'Ambil ubat seperti yang ditetapkan']
-        : ['Visit Klinik Kesihatan if no improvement in 2 days', 'Stay hydrated and rest well', 'Take your medications as prescribed'],
-      medicationReminders: medications.slice(0, 2).map((m) =>
-        isBM ? `Jangan lupa ambil ${m} seperti yang ditetapkan` : `Remember to take your ${m} as prescribed`
-      ),
+        ? ['Rehat 15–20 minit', 'Minum air', 'Check semula petang ni']
+        : ['Rest for 15–20 min', 'Drink some water', 'Check in with me again later'],
+      medicationReminders: firstMed
+        ? [isBM ? `Jangan lupa ${firstMed}` : `Remember to take your ${firstMed}`]
+        : [],
       flaggedForCaregiver: false,
     };
   }
 
-  // ── Default supportive response ─────────────────────────────────────────────
+  // ── 3. CASUAL GREETINGS ("hey", "hi", "good morning") ───────────────────
+  if (/^(hey|hi|hello|yo|halo|hai|selamat|assalam)/i.test(lowerMsg) && lowerMsg.length < 25) {
+    const anchors = [bpObservation, hrObservation, sleepObservation].filter(Boolean) as string[];
+    const anchor = anchors[0];
+    const variants = isBM
+      ? [
+          `${timeGreet} ${firstName}! ${anchor ? `Saya tengok ${anchor}.` : `Macam mana ${primaryCondition || 'keadaan'} anda hari ni?`} ${firstMed ? `Dah ambil ${firstMed}?` : 'Ada apa nak cerita?'}`,
+          `${timeGreet} ${firstName}, gembira dengar dari anda. ${anchor || 'Semuanya kelihatan stabil setakat ni.'} Apa yang anda rasa hari ni?`,
+          `Hai ${firstName}! ${anchor ? anchor + '.' : ''} Ada apa-apa yang nak dibincangkan?`,
+        ]
+      : [
+          `${timeGreet} ${firstName}! ${anchor ? `I was just looking — ${anchor}.` : `How's your ${primaryCondition || 'day'} going?`} ${firstMed ? `Have you taken your ${firstMed} yet?` : 'What\'s on your mind?'}`,
+          `${timeGreet} ${firstName}, nice to hear from you. ${anchor || 'Everything looks stable on your readings.'} Anything bothering you today?`,
+          `Hi ${firstName}! ${anchor ? anchor + '.' : ''} What would you like to talk about?`,
+        ];
+    return {
+      response: hashPick(seed, variants),
+      sentiment: 'supportive',
+      followUpSuggestions: isBM
+        ? [firstMed ? `Dah ambil ${firstMed}?` : 'Macam mana tidur semalam?', 'Ada rasa sakit?', 'Dah minum air cukup?']
+        : [firstMed ? `Taken your ${firstMed} today?` : 'How did you sleep last night?', 'Any aches or pains?', 'Have you had enough water?'],
+      medicationReminders: firstMed
+        ? [isBM ? `${firstMed} — ambil seperti biasa` : `${firstMed} — take as usual`]
+        : [],
+      flaggedForCaregiver: false,
+    };
+  }
+
+  // ── 4. SPECIFIC SYMPTOMS (headache, pain, fever, etc.) ──────────────────
+  const symptomMap: Array<{ kw: RegExp; label: string; labelBM: string }> = [
+    { kw: /headache|sakit kepala|pening/i, label: 'headache', labelBM: 'sakit kepala' },
+    { kw: /cough|batuk/i, label: 'cough', labelBM: 'batuk' },
+    { kw: /fever|demam|hot|panas/i, label: 'fever', labelBM: 'demam' },
+    { kw: /pain|sakit|ache/i, label: 'pain', labelBM: 'sakit' },
+    { kw: /nausea|vomit|loya|muntah/i, label: 'nausea', labelBM: 'loya' },
+    { kw: /swollen|bengkak/i, label: 'swelling', labelBM: 'bengkak' },
+    { kw: /dizzy|pening/i, label: 'dizziness', labelBM: 'pening' },
+  ];
+  const matched = symptomMap.find((s) => s.kw.test(message));
+  if (matched) {
+    const anchor = bpObservation || hrObservation || o2Observation || sleepObservation;
+    return {
+      response: isBM
+        ? `${firstName}, ${matched.labelBM} tu — ${anchor ? anchor + ', mungkin berkaitan' : `dengan ${primaryCondition || 'keadaan anda'} kita kena perhati`}. Rehat, minum air, ${firstMed ? `pastikan ${firstMed} diambil ikut jadual` : 'elak aktiviti berat sekarang'}. Kalau tak baik dalam 2 hari atau jadi lebih teruk, pergi Klinik Kesihatan. Saya akan update rekod supaya ${patient?.caregiver.name || 'penjaga anda'} tahu.`
+        : `${firstName}, about that ${matched.label} — ${anchor ? anchor + ', which could be linked' : `with your ${primaryCondition || 'history'} we should keep an eye on it`}. Rest up, drink water, ${firstMed ? `and make sure your ${firstMed} is on schedule` : 'avoid anything too strenuous for now'}. If it doesn't improve in 2 days or gets worse, please go to Klinik Kesihatan. I'll note this so ${patient?.caregiver.name || 'your caregiver'} is aware, ya.`,
+      sentiment: 'informative',
+      followUpSuggestions: isBM
+        ? ['Rehat dan minum air', `Check semula dalam 2 jam`, 'Klinik Kesihatan jika lebih teruk']
+        : ['Rest and hydrate', 'Check in again in 2 hours', 'Klinik Kesihatan if it worsens'],
+      medicationReminders: firstMed
+        ? [isBM ? `${firstMed} ikut jadual` : `${firstMed} on schedule`]
+        : [],
+      flaggedForCaregiver: false,
+    };
+  }
+
+  // ── 5. DEFAULT — still personalised, not template ───────────────────────
+  const anchors = [bpObservation, hrObservation, sleepObservation, o2Observation].filter(Boolean) as string[];
+  const anchor = anchors[0];
+  const variants = isBM
+    ? [
+        `${firstName}, saya dengar. ${anchor || `Untuk ${primaryCondition || 'keadaan anda'}, setiap perasaan adalah penting`}. Boleh ceritakan lebih sikit — bila ia bermula, dan apa yang anda buat masa tu?`,
+        `Okay ${firstName}, cerita lagi. ${anchor ? anchor + '.' : ''} Saya nak faham apa yang anda rasa sekarang, supaya saya boleh bantu dengan lebih tepat.`,
+      ]
+    : [
+        `${firstName}, I'm listening. ${anchor || `With your ${primaryCondition || 'history'}, anything you feel matters`}. Tell me a bit more — when did it start, and what were you doing at the time?`,
+        `Okay ${firstName}, tell me more. ${anchor ? anchor + '.' : ''} I want to understand what you're feeling right now so I can help you properly, ya.`,
+        `Go on ${firstName}. ${anchor ? `I can see ${anchor}, so context helps.` : ''} What exactly is on your mind today?`,
+      ];
   return {
-    response: isBM
-      ? `${firstName}, saya sentiasa di sini untuk anda! Bagaimana perasaan anda hari ini? Jika ada apa-apa yang mengganggu anda — sama ada sakit, kebimbangan, atau sekadar mahu berbual — sila ceritakan. Jangan lupa ambil ubat anda tepat pada masanya, dan kalau ada apa-apa yang tidak kena, lebih baik pergi ke Klinik Kesihatan awal dari lewat ya.`
-      : `Good to hear from you, ${firstName}! I'm here for you anytime. How are you feeling today? If anything is bothering you — whether it's a health concern, your medications, or you just want to chat — please tell me lah. Remember to take your medicines on time, and if anything feels off, it's always better to check with your Klinik Kesihatan early, okay?`,
+    response: hashPick(seed, variants),
     sentiment: 'supportive',
     followUpSuggestions: isBM
-      ? ['Bagaimana perasaan anda hari ini?', 'Sudah ambil ubat pagi ini?', 'Ada sebarang sakit atau ketidakselesaan?']
-      : ['How are you feeling today?', 'Have you taken your morning medications?', 'Any pain or discomfort to report?'],
-    medicationReminders: medications.slice(0, 2).map((m) =>
-      isBM ? `Jangan lupa ambil ${m}` : `Remember to take your ${m}`
-    ),
+      ? ['Bila ia bermula?', 'Ada rasa sakit?', firstMed ? `Dah ambil ${firstMed}?` : 'Macam mana tidur semalam?']
+      : ['When did it start?', 'Any pain or discomfort?', firstMed ? `Taken your ${firstMed} yet?` : 'How was your sleep?'],
+    medicationReminders: firstMed
+      ? [isBM ? `Jangan lupa ${firstMed}` : `Remember your ${firstMed}`]
+      : [],
     flaggedForCaregiver: false,
   };
 }

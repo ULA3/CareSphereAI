@@ -309,16 +309,21 @@ router.post('/simulate/:id', async (req: Request, res: Response) => {
 // sustainable and lets caregiver alerts (Twilio/SendGrid) fire organically
 // during the live demo.
 //
-// Tuning knobs:
-//   AUTO_SIM_BATCH_SIZE    — patients processed per tick (default 8)
-//   AUTO_SIM_INTERVAL_MS   — tick interval (default 20s)
+// Tuning knobs (conservative defaults — must leave quota headroom for user chat):
+//   AUTO_SIM_BATCH_SIZE    — patients processed per tick (default 3)
+//   AUTO_SIM_INTERVAL_MS   — tick interval (default 30s)
+//
+// Gemini 2.5 Flash free tier is ~10 RPM. 3 patients / 30s = 6 RPM for auto-sim,
+// leaving ~4 RPM for user-facing companion chat + manual risk assessments.
+// If auto-sim is too aggressive, Gemini returns 429 and the chat falls back
+// to template responses — which is exactly the bug we're preventing here.
 
 let autoSimInterval: ReturnType<typeof setInterval> | null = null;
 let autoSimEnabled = false;
 let autoSimBusy = false; // prevents overlapping ticks
 
-const AUTO_SIM_BATCH_SIZE = Number(process.env.AUTO_SIM_BATCH_SIZE || 8);
-const AUTO_SIM_INTERVAL_MS = Number(process.env.AUTO_SIM_INTERVAL_MS || 20_000);
+const AUTO_SIM_BATCH_SIZE = Number(process.env.AUTO_SIM_BATCH_SIZE || 3);
+const AUTO_SIM_INTERVAL_MS = Number(process.env.AUTO_SIM_INTERVAL_MS || 30_000);
 
 function pickRandomPatients(pool: ReturnType<typeof healthMemory.getAllPatients>, n: number) {
   if (pool.length <= n) return pool;
