@@ -4,92 +4,183 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* ── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --background: #0a0f1e;
-  --surface: #111827;
-  --surface-2: #1f2937;
-  --border: #374151;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --accent-green: #10b981;
-  --accent-blue: #3b82f6;
-  --risk-low: #10b981;
-  --risk-medium: #f59e0b;
-  --risk-high: #ef4444;
+  --bg-app:       #F0F4F8;
+  --bg-card:      #FFFFFF;
+  --bg-sidebar:   #FFFFFF;
+  --bg-navbar:    #FFFFFF;
+  --border:       #E2E8F0;
+  --border-light: #F1F5F9;
+
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+
+  --primary:       #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-light: #EFF6FF;
+  --primary-muted: #BFDBFE;
+
+  --secondary:     #14B8A6;
+  --secondary-light: #F0FDFA;
+
+  --risk-low:      #16A34A;
+  --risk-low-bg:   #F0FDF4;
+  --risk-low-border:#BBF7D0;
+  --risk-medium:   #D97706;
+  --risk-medium-bg:#FFFBEB;
+  --risk-medium-border:#FDE68A;
+  --risk-high:     #DC2626;
+  --risk-high-bg:  #FEF2F2;
+  --risk-high-border:#FECACA;
+
+  --shadow-sm: 0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px -1px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.06);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/* ── Base Reset ─────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
 
 body {
-  background-color: var(--background);
+  background-color: var(--bg-app);
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--surface); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+/* ── Card Component ─────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
 
-/* Risk level colors */
-.risk-low { color: var(--risk-low); }
-.risk-medium { color: var(--risk-medium); }
-.risk-high { color: var(--risk-high); }
-.bg-risk-low { background-color: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
-.bg-risk-medium { background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); }
-.bg-risk-high { background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); }
-
-/* Glassmorphism cards */
+/* Legacy glass-card → now a clean white card */
 .glass-card {
-  background: rgba(17, 24, 39, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(55, 65, 81, 0.5);
-  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Glow effects */
-.glow-green { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
-.glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
-.glow-yellow { box-shadow: 0 0 20px rgba(245, 158, 11, 0.2); }
+/* ── Risk Colour Helpers ────────────────────────────────────────────────────── */
+.risk-low    { color: var(--risk-low); }
+.risk-medium { color: var(--risk-medium); }
+.risk-high   { color: var(--risk-high); }
 
-/* Gradient text */
+.bg-risk-low {
+  background-color: var(--risk-low-bg);
+  border: 1px solid var(--risk-low-border);
+}
+.bg-risk-medium {
+  background-color: var(--risk-medium-bg);
+  border: 1px solid var(--risk-medium-border);
+}
+.bg-risk-high {
+  background-color: var(--risk-high-bg);
+  border: 1px solid var(--risk-high-border);
+}
+
+/* ── Glow / Accent Borders ──────────────────────────────────────────────────── */
+.glow-green  { box-shadow: 0 0 0 2px rgba(22,163,74,0.15), var(--shadow-sm); }
+.glow-red    { box-shadow: 0 0 0 2px rgba(220,38,38,0.18), var(--shadow-sm); }
+.glow-yellow { box-shadow: 0 0 0 2px rgba(217,119,6,0.18), var(--shadow-sm); }
+
+/* ── Brand Gradient Text ────────────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #10b981, #3b82f6);
+  background: linear-gradient(135deg, #2563EB, #14B8A6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Animations */
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 5px; height: 5px; }
+::-webkit-scrollbar-track    { background: var(--border-light); }
+::-webkit-scrollbar-thumb    { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
 @keyframes heartbeat {
   0%, 100% { transform: scale(1); }
-  14% { transform: scale(1.15); }
-  28% { transform: scale(1); }
-  42% { transform: scale(1.1); }
-  70% { transform: scale(1); }
+  14%       { transform: scale(1.15); }
+  28%       { transform: scale(1); }
+  42%       { transform: scale(1.1); }
+  70%       { transform: scale(1); }
 }
 .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
 
 @keyframes blink-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50%       { opacity: 0.3; }
 }
 .animate-blink { animation: blink-dot 1.5s ease-in-out infinite; }
 
-/* Chat bubbles */
+@keyframes slideUp {
+  0%   { transform: translateY(8px); opacity: 0; }
+  100% { transform: translateY(0);   opacity: 1; }
+}
+.animate-slide-up { animation: slideUp 0.25s ease-out; }
+
+@keyframes fadeIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.animate-fade-in { animation: fadeIn 0.4s ease-out; }
+
+/* ── Chat Bubbles ───────────────────────────────────────────────────────────── */
 .chat-bubble-user {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  background: linear-gradient(135deg, #1D4ED8, #2563EB);
   border-radius: 18px 18px 4px 18px;
+  color: #fff;
 }
 .chat-bubble-ai {
-  background: rgba(31, 41, 55, 0.9);
-  border: 1px solid rgba(55, 65, 81, 0.5);
+  background: #F8FAFC;
+  border: 1px solid var(--border);
   border-radius: 18px 18px 18px 4px;
+  color: var(--text-primary);
 }
+
+/* ── Search Input ───────────────────────────────────────────────────────────── */
+.search-input {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+.search-input::placeholder { color: var(--text-muted); }
+
+/* ── Sidebar Nav Active ─────────────────────────────────────────────────────── */
+.nav-active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-left: 3px solid var(--primary);
+}
+.nav-inactive {
+  color: var(--text-secondary);
+  border-left: 3px solid transparent;
+}
+.nav-inactive:hover {
+  background: var(--border-light);
+  color: var(--text-primary);
+}
+
+/* ── Status Badge ───────────────────────────────────────────────────────────── */
+.status-dot-online  { background: var(--risk-low); }
+.status-dot-warning { background: var(--risk-medium); }
+.status-dot-offline { background: #94A3B8; }
+
+/* ── Data Table ─────────────────────────────────────────────────────────────── */
+.table-row-hover:hover { background: var(--border-light); }

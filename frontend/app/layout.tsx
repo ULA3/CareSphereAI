@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 
@@ -11,12 +12,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-[#0a0f1e] text-gray-100 min-h-screen">
+    <html lang="en">
+      <body className="bg-app text-slate-900 min-h-screen antialiased">
         <LanguageProvider>
-          <div className="flex min-h-screen">
+          {/* Top Navbar — full width, fixed */}
+          <Navbar />
+
+          <div className="flex min-h-screen pt-16">
+            {/* Left Sidebar — fixed, starts below navbar */}
             <Sidebar />
-            <main className="flex-1 ml-64 p-6 overflow-auto">
+
+            {/* Main Content — offset for sidebar + navbar */}
+            <main className="flex-1 ml-64 min-h-[calc(100vh-4rem)] p-6 overflow-auto">
               {children}
             </main>
           </div>

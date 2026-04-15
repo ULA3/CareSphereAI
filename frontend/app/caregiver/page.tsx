@@ -28,15 +28,15 @@ export default function CaregiverPage() {
   }, [fetchData]);
 
   const riskColor = (level: string) => ({
-    high: 'text-red-400 bg-red-500/10 border-red-500/30',
-    medium: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-    low: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-  }[level] || 'text-gray-400 bg-gray-800 border-gray-700');
+    high: 'text-red-700 bg-red-50 border-red-200',
+    medium: 'text-amber-700 bg-amber-50 border-amber-200',
+    low: 'text-green-700 bg-green-50 border-green-200',
+  }[level] || 'text-slate-500 bg-slate-50 border-slate-200');
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-500 rounded-full animate-spin" />
       </div>
     );
   }
@@ -46,17 +46,17 @@ export default function CaregiverPage() {
   ) || [];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">{t.caregiver}</h1>
-          <p className="text-gray-400 mt-1 text-sm">Family & caregiver overview — all patients at a glance</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t.caregiver}</h1>
+          <p className="text-slate-500 mt-1 text-sm">Family & caregiver overview — all patients at a glance</p>
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-gray-500 text-xs">Updated {lastUpdate.toLocaleTimeString()}</p>
+          <p className="text-slate-400 text-xs">Updated {lastUpdate.toLocaleTimeString()}</p>
           <button onClick={fetchData}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors">
+            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -64,33 +64,33 @@ export default function CaregiverPage() {
 
       {/* Urgent Alerts */}
       {highRiskPatients.length > 0 && (
-        <div className="glass-card p-5 border-red-500/40 bg-red-500/5 glow-red">
-          <h2 className="text-sm font-bold text-red-400 flex items-center gap-2 mb-3">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+          <h2 className="text-sm font-bold text-red-700 flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 animate-pulse" />
             URGENT — Immediate Attention Required
           </h2>
           <div className="space-y-2">
             {highRiskPatients.map(({ patient, latestAssessment }) => (
-              <div key={patient.id} className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+              <div key={patient.id} className="bg-white border border-red-200 rounded-lg p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-red-200">{patient.name}</p>
-                    <p className="text-xs text-red-400/80">{patient.age} yrs · {patient.location.city}</p>
+                    <p className="font-semibold text-red-700">{patient.name}</p>
+                    <p className="text-xs text-red-500">{patient.age} yrs · {patient.location.city}</p>
                   </div>
-                  <span className="text-xs font-bold text-red-300 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-500/30">
+                  <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
                     Score: {latestAssessment?.riskScore}/100
                   </span>
                 </div>
                 {latestAssessment && (
-                  <p className="text-xs text-red-300/80 mt-2 line-clamp-2">{latestAssessment.geminiReasoning}</p>
+                  <p className="text-xs text-red-600 mt-2 line-clamp-2">{latestAssessment.geminiReasoning}</p>
                 )}
                 <div className="mt-2 flex gap-2">
                   <a href={`tel:${patient.caregiver.phone}`}
-                    className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                    className="flex items-center gap-1 text-xs text-green-700 hover:text-green-800 transition-colors">
                     <Phone className="w-3 h-3" /> {patient.caregiver.phone}
                   </a>
                   <a href={`mailto:${patient.caregiver.email}`}
-                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                    className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 transition-colors">
                     <Mail className="w-3 h-3" /> {patient.caregiver.email}
                   </a>
                 </div>
@@ -102,60 +102,60 @@ export default function CaregiverPage() {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card p-5">
-          <Users className="w-5 h-5 text-blue-400 mb-2" />
-          <p className="text-3xl font-bold text-white">{stats?.totalPatients || 0}</p>
-          <p className="text-gray-400 text-sm mt-1">{t.totalPatients}</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-card p-5">
+          <Users className="w-5 h-5 text-brand-500 mb-2" />
+          <p className="text-3xl font-bold text-slate-900">{stats?.totalPatients || 0}</p>
+          <p className="text-slate-500 text-sm mt-1">{t.totalPatients}</p>
         </div>
-        <div className={`glass-card p-5 ${(stats?.highRiskCount || 0) > 0 ? 'glow-red' : ''}`}>
-          <AlertTriangle className={`w-5 h-5 mb-2 ${(stats?.highRiskCount || 0) > 0 ? 'text-red-400 animate-pulse' : 'text-gray-600'}`} />
-          <p className="text-3xl font-bold text-white">{stats?.highRiskCount || 0}</p>
-          <p className="text-gray-400 text-sm mt-1">{t.highRisk}</p>
+        <div className={`bg-white rounded-xl border shadow-card p-5 ${(stats?.highRiskCount || 0) > 0 ? 'border-red-200' : 'border-slate-200'}`}>
+          <AlertTriangle className={`w-5 h-5 mb-2 ${(stats?.highRiskCount || 0) > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}`} />
+          <p className="text-3xl font-bold text-slate-900">{stats?.highRiskCount || 0}</p>
+          <p className="text-slate-500 text-sm mt-1">{t.highRisk}</p>
         </div>
-        <div className="glass-card p-5">
-          <Activity className="w-5 h-5 text-amber-400 mb-2" />
-          <p className="text-3xl font-bold text-white">{stats?.mediumRiskCount || 0}</p>
-          <p className="text-gray-400 text-sm mt-1">{t.mediumRisk}</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-card p-5">
+          <Activity className="w-5 h-5 text-amber-500 mb-2" />
+          <p className="text-3xl font-bold text-slate-900">{stats?.mediumRiskCount || 0}</p>
+          <p className="text-slate-500 text-sm mt-1">{t.mediumRisk}</p>
         </div>
-        <div className="glass-card p-5">
-          <Heart className="w-5 h-5 text-emerald-400 mb-2" />
-          <p className="text-3xl font-bold text-white">{stats?.alertsToday || 0}</p>
-          <p className="text-gray-400 text-sm mt-1">{t.assessmentsToday}</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-card p-5">
+          <Heart className="w-5 h-5 text-teal-600 mb-2" />
+          <p className="text-3xl font-bold text-slate-900">{stats?.alertsToday || 0}</p>
+          <p className="text-slate-500 text-sm mt-1">{t.assessmentsToday}</p>
         </div>
       </div>
 
       {/* All Patients Detail */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-emerald-400" />
+        <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5 text-teal-600" />
           All Patients Under Care
         </h2>
         <div className="space-y-4">
           {stats?.patientsWithReadings.map(({ patient, latestReading, latestAssessment, adherenceRate }) => {
             const riskLevel = latestAssessment?.riskLevel || 'low';
             return (
-              <div key={patient.id} className={`glass-card p-5 transition-all hover:scale-[1.002] border ${riskColor(riskLevel)}`}>
+              <div key={patient.id} className={`bg-white rounded-xl border shadow-card p-5 transition-all hover:scale-[1.002] ${riskColor(riskLevel)}`}>
                 <div className="flex items-start gap-4 flex-wrap">
                   {/* Patient Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <h3 className="font-bold text-white text-lg">{patient.name}</h3>
+                      <h3 className="font-bold text-slate-900 text-lg">{patient.name}</h3>
                       {latestAssessment && (
                         <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full border ${riskColor(riskLevel)}`}>
                           {riskLevel} risk · {latestAssessment.riskScore}/100
                         </span>
                       )}
                     </div>
-                    <p className="text-gray-400 text-sm">{patient.age} years · {patient.gender} · {patient.location.city}, {patient.location.state}</p>
-                    <p className="text-gray-500 text-xs mt-1">{patient.conditions.join(' · ')}</p>
+                    <p className="text-slate-500 text-sm">{patient.age} years · {patient.gender} · {patient.location.city}, {patient.location.state}</p>
+                    <p className="text-slate-400 text-xs mt-1">{patient.conditions.join(' · ')}</p>
                   </div>
 
                   {/* Caregiver Contact */}
                   <div className="text-right">
-                    <p className="text-xs text-gray-400 font-semibold">{patient.caregiver.name}</p>
-                    <p className="text-xs text-gray-500">{patient.caregiver.relationship}</p>
+                    <p className="text-xs text-slate-600 font-semibold">{patient.caregiver.name}</p>
+                    <p className="text-xs text-slate-400">{patient.caregiver.relationship}</p>
                     <a href={`tel:${patient.caregiver.phone}`}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 justify-end mt-1 transition-colors">
+                      className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1 justify-end mt-1 transition-colors">
                       <Phone className="w-3 h-3" /> {patient.caregiver.phone}
                     </a>
                   </div>
@@ -172,9 +172,9 @@ export default function CaregiverPage() {
                       { label: 'Move', value: `${latestReading.movementScore.toFixed(0)}/100`, alert: latestReading.movementScore < 30 },
                       { label: 'Temp', value: `${latestReading.temperature.toFixed(1)}°C`, alert: latestReading.temperature > 37.8 },
                     ].map(({ label, value, alert }) => (
-                      <div key={label} className={`text-center p-2 rounded-lg ${alert ? 'bg-red-500/10 border border-red-500/20' : 'bg-gray-800/50'}`}>
-                        <p className={`text-sm font-bold ${alert ? 'text-red-400' : 'text-white'}`}>{value}</p>
-                        <p className="text-xs text-gray-500">{label}</p>
+                      <div key={label} className={`text-center p-2 rounded-lg border ${alert ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
+                        <p className={`text-sm font-bold ${alert ? 'text-red-600' : 'text-slate-900'}`}>{value}</p>
+                        <p className="text-xs text-slate-400">{label}</p>
                       </div>
                     ))}
                   </div>
@@ -184,15 +184,15 @@ export default function CaregiverPage() {
                 <div className="mt-4 flex gap-4 flex-wrap">
                   {adherenceRate !== undefined && (
                     <div className="flex items-center gap-2">
-                      <Pill className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-xs text-gray-400">{t.adherenceRate}:</span>
-                      <span className={`text-xs font-bold ${adherenceRate >= 80 ? 'text-emerald-400' : adherenceRate >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                      <Pill className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-xs text-slate-500">{t.adherenceRate}:</span>
+                      <span className={`text-xs font-bold ${adherenceRate >= 80 ? 'text-green-700' : adherenceRate >= 60 ? 'text-amber-700' : 'text-red-700'}`}>
                         {adherenceRate}%
                       </span>
                     </div>
                   )}
                   {latestAssessment && (
-                    <p className="text-xs text-gray-500 italic flex-1 line-clamp-2">
+                    <p className="text-xs text-slate-400 italic flex-1 line-clamp-2">
                       {latestAssessment.geminiReasoning}
                     </p>
                   )}

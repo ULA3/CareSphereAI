@@ -2,112 +2,141 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, MessageCircle, Bell, LayoutDashboard, Heart, Zap, TrendingUp, MapPin, Pill, Users, FileText, Cpu, UserPlus } from 'lucide-react';
+import {
+  LayoutDashboard, MessageCircle, Bell, TrendingUp, MapPin,
+  Pill, Users, FileText, Cpu, UserPlus, ChevronRight,
+  Activity, Zap, Brain,
+} from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+
+interface NavItem {
+  href: string;
+  icon: React.ElementType;
+  key?: string;
+  label?: string;
+  badge?: boolean;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [
+      { href: '/',          icon: LayoutDashboard, key: 'dashboard' },
+      { href: '/alerts',    icon: Bell,            key: 'alerts', badge: true },
+      { href: '/trends',    icon: TrendingUp,      key: 'trends' },
+    ],
+  },
+  {
+    label: 'Patient Care',
+    items: [
+      { href: '/companion',  icon: MessageCircle, key: 'aiCompanion' },
+      { href: '/caregiver',  icon: Users,         key: 'caregiver' },
+      { href: '/medications',icon: Pill,          key: 'medications' },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { href: '/hospitals', icon: MapPin,   key: 'hospitals' },
+      { href: '/report',    icon: FileText, key: 'weeklyReport' },
+      { href: '/devices',   icon: Cpu,      label: 'Device Monitor' },
+      { href: '/onboard',   icon: UserPlus, label: 'Add Patient' },
+    ],
+  },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lang, t, setLang } = useLanguage();
+  const { t } = useLanguage();
 
-  const navItems = [
-    { href: '/', label: t.dashboard, icon: LayoutDashboard },
-    { href: '/companion', label: t.aiCompanion, icon: MessageCircle },
-    { href: '/alerts', label: t.alerts, icon: Bell, badge: true },
-    { href: '/trends', label: t.trends, icon: TrendingUp },
-    { href: '/hospitals', label: t.hospitals, icon: MapPin },
-    { href: '/medications', label: t.medications, icon: Pill },
-    { href: '/caregiver', label: t.caregiver, icon: Users },
-    { href: '/report', label: t.weeklyReport, icon: FileText },
-    { href: '/devices', label: 'Device Monitor', icon: Cpu },
-    { href: '/onboard', label: 'Add Patient', icon: UserPlus },
-  ];
+  const getLabel = (item: NavItem) => {
+    if (item.key) {
+      const translations = t as unknown as Record<string, string>;
+      return translations[item.key] || item.key;
+    }
+    return item.label || '';
+  };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-gray-900/95 border-r border-gray-800 flex flex-col z-40 overflow-y-auto">
-      {/* Logo */}
-      <div className="p-5 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg glow-green shrink-0">
-            <Heart className="w-5 h-5 text-white animate-heartbeat" />
-          </div>
-          <div>
-            <h1 className="font-bold text-white text-lg leading-tight">CareSphere</h1>
-            <p className="text-emerald-400 text-xs font-medium flex items-center gap-1">
-              <Zap className="w-3 h-3" /> AI-Powered
+    <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white border-r border-slate-200 flex flex-col z-40 overflow-y-auto">
+
+      {/* ── Navigation Groups ────────────────────────────────────── */}
+      <nav className="flex-1 p-3 space-y-5 pt-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {group.label}
             </p>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const { href, icon: Icon, badge } = item;
+                const active = pathname === href;
+                const itemLabel = getLabel(item);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group border-l-[3px] ${
+                        active
+                          ? 'bg-brand-50 text-brand-600 border-brand-500'
+                          : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-brand-500' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                      <span className="flex-1 truncate">{itemLabel}</span>
+                      {badge && (
+                        <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0 animate-pulse">
+                          !
+                        </span>
+                      )}
+                      {active && <ChevronRight className="w-3.5 h-3.5 text-brand-400 shrink-0" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </div>
-        <p className="mt-2 text-gray-500 text-xs">
-          Elderly Health Monitoring<br />
-          <span className="text-emerald-600">Track 3: Vital Signs</span>
-        </p>
-
-        {/* Language Toggle */}
-        <div className="mt-3 flex rounded-lg overflow-hidden border border-gray-700">
-          <button
-            onClick={() => setLang('en')}
-            className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${lang === 'en' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}
-          >
-            🇬🇧 EN
-          </button>
-          <button
-            onClick={() => setLang('bm')}
-            className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${lang === 'bm' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}
-          >
-            🇲🇾 BM
-          </button>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5">
-        <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2 px-3">Navigation</p>
-        {navItems.map(({ href, label, icon: Icon, badge }) => {
-          const active = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                active
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{label}</span>
-              {badge && (
-                <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shrink-0">
-                  !
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        ))}
       </nav>
 
-      {/* AI Status */}
-      <div className="p-3 border-t border-gray-800 shrink-0">
-        <div className="glass-card p-3 space-y-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Stack</p>
-          <div className="space-y-1.5">
+      {/* ── AI Status Panel ──────────────────────────────────────── */}
+      <div className="p-3 border-t border-slate-100 shrink-0">
+        <div className="rounded-xl bg-gradient-to-br from-brand-50 to-teal-50 border border-brand-100 p-3">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">
+            AI Stack
+          </p>
+          <div className="space-y-2">
             {[
-              { label: 'Gemini 2.5 Flash', status: 'Active' },
-              { label: 'Genkit Flows', status: 'Ready' },
-              { label: 'RAG Memory', status: 'Online' },
-            ].map(({ label, status }) => (
+              { icon: Zap,      label: 'Gemini 2.5 Flash', status: 'Active',  color: 'text-teal-600' },
+              { icon: Activity, label: 'Genkit Flows',      status: 'Ready',   color: 'text-brand-600' },
+              { icon: Brain,    label: 'RAG Memory',        status: 'Online',  color: 'text-purple-600' },
+            ].map(({ icon: Icon, label, status, color }) => (
               <div key={label} className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">{label}</span>
-                <span className="flex items-center gap-1 text-xs text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-blink" />
-                  {status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <Icon className={`w-3.5 h-3.5 ${color}`} />
+                  <span className="text-xs text-slate-600">{label}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full animate-blink ${
+                    status === 'Active' ? 'bg-teal-500' : status === 'Ready' ? 'bg-brand-500' : 'bg-purple-500'
+                  }`} />
+                  <span className={`text-[10px] font-semibold ${color}`}>{status}</span>
+                </div>
               </div>
             ))}
           </div>
         </div>
-        <p className="mt-2 text-center text-gray-600 text-xs">
-          Project 2030 · GDG UTM
+
+        <p className="text-center text-slate-400 text-[11px] mt-3">
+          Project 2030 · Track 3: Vital Signs
+        </p>
+        <p className="text-center text-slate-300 text-[10px]">
+          GDG UTM Hackathon
         </p>
       </div>
     </aside>
