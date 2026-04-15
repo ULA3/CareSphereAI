@@ -4,6 +4,7 @@ import { runRiskAssessment } from '../flows/riskAssessmentFlow';
 import { runEmergencyActions } from '../flows/emergencyActionFlow';
 import { generateWeeklyReport } from '../flows/weeklyReportFlow';
 import { findNearbyHospitals } from '../tools/hospitalFinderTool';
+import { sendCaregiverAlert } from '../tools/caregiverAlertTool';
 import { HealthReading } from '../types/health.types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -403,6 +404,60 @@ router.get('/dashboard/stats', (req: Request, res: Response) => {
   };
 
   res.json({ success: true, data: stats });
+});
+
+// ─── ALERTS (Demo/Test) ─────────────────────────────────────────────────────
+/**
+ * Fire a test caregiver alert for any patient — proves Twilio/SendGrid is live.
+ * POST /api/health/alerts/test
+ * body: { patientId?: string, riskLevel?: 'medium'|'high' }
+ *
+ * If patientId is omitted, uses patient-001 (Ahmad). Useful for demo day to
+ * trigger a real SMS + email without running the full simulation pipeline.
+ */
+router.post('/alerts/test', async (req: Request, res: Response) => {
+  try {
+    const patientId = req.body?.patientId || 'patient-001';
+    const riskLevel = (req.body?.riskLevel === 'medium' ? 'medium' : 'high') as 'medium' | 'high';
+
+    const patient = healthMemory.getPatient(patientId);
+    if (!patient) {
+      return res.status(404).json({ success: false, error: `Patient ${patientId} not found` });
+    }
+
+    const reasons =
+      riskLevel === 'high'
+        ? ['SpO₂ 88% (critical hypoxaemia)', 'HR 128bpm (severe tachycardia)', 'BP 186/112mmHg (hypertensive crisis)']
+        : ['Blood pressure elevated (158/96)', 'Sleep 4.2h (below baseline)', 'Movement score declining'];
+
+    const urgencyMessage =
+      riskLevel === 'high'
+        ? `🚨 URGENT: CareSphere AI has detected CRITICAL health risk for ${patient.name}. Immediate medical attention required. This is a TEST alert triggered manually for system verification.`
+        : `⚠️ ATTENTION: CareSphere AI has detected elevated health risk for ${patient.name}. Please check in within 30 minutes. This is a TEST alert triggered manually.`;
+
+    const result = await sendCaregiverAlert({
+      patientId,
+      riskLevel,
+      riskReasons: reasons,
+      urgencyMessage,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        testAlert: true,
+        patient: { id: patient.id, name: patient.name, caregiver: patient.caregiver },
+        dispatchResult: result,
+        hint:
+          result.smsStatus === 'skipped' && result.emailStatus === 'skipped'
+            ? 'Running in SIMULATION mode — set TWILIO_* and SENDGRID_* env vars in Cloud Run to enable real dispatch.'
+            : undefined,
+      },
+    });
+  } catch (err) {
+    console.error('[alerts/test] Error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
 });
 
 export default router;
