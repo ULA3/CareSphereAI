@@ -27,11 +27,13 @@ function DashboardContent() {
   const [riskFilter, setRiskFilter]     = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [nameFilter, setNameFilter]     = useState('');
   const [highlightId]                   = useState(searchParams.get('highlight') || '');
+  const [page, setPage]                 = useState(1);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (p?: number) => {
+    const pageNum = p ?? page;
     try {
       const [statsData, assessData] = await Promise.all([
-        api.getDashboardStats(),
+        api.getDashboardStats(pageNum, 50),
         api.getAllAssessments(),
       ]);
       setStats(statsData);
@@ -43,7 +45,7 @@ function DashboardContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     fetchData();
@@ -157,7 +159,7 @@ function DashboardContent() {
           <span className="text-slate-400 text-xs hidden sm:block">
             Updated {lastUpdate.toLocaleTimeString()}
           </span>
-          <button onClick={fetchData}
+          <button onClick={() => fetchData()}
             className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors shadow-card">
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -177,7 +179,8 @@ function DashboardContent() {
 
       {/* ── Stat Cards ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Users}         label={t.totalPatients}     value={stats?.totalPatients || 0}    color="blue" />
+        <StatCard icon={Users}         label={t.totalPatients}     value={stats?.totalPatients || 0}    color="blue"
+          sub={stats ? `${stats.monitoredPatients} monitored` : undefined} />
         <StatCard icon={AlertTriangle} label={t.highRisk}          value={stats?.highRiskCount || 0}    color="red"    pulse={!!stats?.highRiskCount} />
         <StatCard icon={Shield}        label={t.mediumRisk}        value={stats?.mediumRiskCount || 0}  color="amber" />
         <StatCard icon={Activity}      label={t.assessmentsToday}  value={stats?.alertsToday || 0}      color="teal" />
@@ -222,7 +225,10 @@ function DashboardContent() {
             <div>
               <h2 className="font-semibold text-slate-900">{t.patientMonitoring}</h2>
               <p className="text-slate-400 text-xs">
-                Showing {filteredPatients.length} of {stats?.patientsWithReadings.length || 0} monitored patients
+                Showing {filteredPatients.length} of {stats?.monitoredPatients || 0} monitored
+                {stats && stats.totalPatients > stats.monitoredPatients
+                  ? ` · ${stats.totalPatients.toLocaleString()} total in system`
+                  : ''}
               </p>
             </div>
           </div>
@@ -297,6 +303,30 @@ function DashboardContent() {
         )}
       </div>
 
+      {/* ── Pagination ────────────────────────────────────────────── */}
+      {stats && stats.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => { const np = Math.max(1, page - 1); setPage(np); fetchData(np); }}
+            disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 bg-white"
+          >
+            ← Prev
+          </button>
+          <span className="text-sm text-slate-500 px-2">
+            Page {stats.currentPage} of {stats.totalPages}
+            <span className="text-slate-400 ml-2">({stats.monitoredPatients} monitored patients)</span>
+          </span>
+          <button
+            onClick={() => { const np = Math.min(stats.totalPages, page + 1); setPage(np); fetchData(np); }}
+            disabled={page >= stats.totalPages}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 bg-white"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
       {/* ── Tech Stack Footer ─────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
@@ -335,8 +365,8 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, color, pulse }: {
-  icon: React.ElementType; label: string; value: number; color: string; pulse?: boolean;
+function StatCard({ icon: Icon, label, value, color, pulse, sub }: {
+  icon: React.ElementType; label: string; value: number; color: string; pulse?: boolean; sub?: string;
 }) {
   const cfg: Record<string, { bg: string; icon: string; border: string }> = {
     blue:  { bg: 'bg-brand-50',  icon: 'text-brand-500',  border: 'border-brand-100' },
@@ -353,6 +383,7 @@ function StatCard({ icon: Icon, label, value, color, pulse }: {
       </div>
       <p className="text-3xl font-bold text-slate-900">{value.toLocaleString()}</p>
       <p className="text-slate-500 text-sm mt-0.5">{label}</p>
+      {sub && <p className="text-slate-400 text-xs mt-0.5">{sub}</p>}
     </div>
   );
 }

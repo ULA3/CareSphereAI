@@ -65,7 +65,10 @@ export interface RiskAssessment {
 }
 
 export interface DashboardStats {
-  totalPatients: number;
+  totalPatients: number;       // all patients in system (e.g. 1000)
+  monitoredPatients: number;   // patients with at least 1 assessment
+  totalPages: number;
+  currentPage: number;
   highRiskCount: number;
   mediumRiskCount: number;
   lowRiskCount: number;
@@ -212,7 +215,8 @@ export const api = {
   getAssessments: (patientId: string, limit = 5) =>
     request<RiskAssessment[]>(`/api/health/patients/${patientId}/assessments?limit=${limit}`),
   getAllAssessments: () => request<RiskAssessment[]>('/api/health/assessments'),
-  getDashboardStats: () => request<DashboardStats>('/api/health/dashboard/stats'),
+  getDashboardStats: (page = 1, limit = 50) =>
+    request<DashboardStats>(`/api/health/dashboard/stats?page=${page}&limit=${limit}`),
 
   // Simulate
   simulate: (patientId: string, scenario: 'normal' | 'warning' | 'critical') =>

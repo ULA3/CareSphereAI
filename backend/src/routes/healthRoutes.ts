@@ -344,34 +344,62 @@ router.get('/auto-simulate/status', (_req: Request, res: Response) => {
 
 // ─── DASHBOARD STATS ─────────────────────────────────────────────────────────
 
-router.get('/dashboard/stats', (_req: Request, res: Response) => {
-  const patients = healthMemory.getAllPatients();
+router.get('/dashboard/stats', (req: Request, res: Response) => {
+  const allPatients = healthMemory.getAllPatients();
   const allAssessments = healthMemory.getAllAssessments();
   const recent = allAssessments.slice(0, 50);
 
+  // Dashboard shows only patients with at least 1 risk assessment (actively monitored).
+  // The full 1000-patient list is available via GET /patients and the navbar search.
+  const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 200);
+  const page  = Math.max(parseInt((req.query.page  as string) || '1',  10), 1);
+
+  // Build monitored list: patients that have at least one assessment, sorted most-recent first
+  type PatientRow = {
+    patient: ReturnType<typeof healthMemory.getPatient>;
+    latestReading: ReturnType<typeof healthMemory.getLatestReadings>[0] | null;
+    latestAssessment: ReturnType<typeof healthMemory.getLatestAssessments>[0] | null;
+    adherenceRate: number;
+    lastActivity: number;
+  };
+
+  const monitored: PatientRow[] = [];
+  for (const p of allPatients) {
+    const assessments = healthMemory.getLatestAssessments(p.id, 1);
+    if (assessments.length === 0) continue; // skip patients with no assessments yet
+    const readings  = healthMemory.getLatestReadings(p.id, 1);
+    const adherence = healthMemory.getMedicationAdherence(p.id);
+    monitored.push({
+      patient:          p,
+      latestReading:    readings[0]    || null,
+      latestAssessment: assessments[0] || null,
+      adherenceRate:    adherence.rate,
+      lastActivity:     new Date(assessments[0].timestamp).getTime(),
+    });
+  }
+
+  // Sort most-recently assessed first
+  monitored.sort((a, b) => b.lastActivity - a.lastActivity);
+
+  const totalMonitored = monitored.length;
+  const start = (page - 1) * limit;
+  const pageSlice = monitored.slice(start, start + limit).map(({ lastActivity: _la, ...rest }) => rest);
+
   const stats = {
-    totalPatients: patients.length,
-    highRiskCount: recent.filter((a) => a.riskLevel === 'high').length,
-    mediumRiskCount: recent.filter((a) => a.riskLevel === 'medium').length,
-    lowRiskCount: recent.filter((a) => a.riskLevel === 'low').length,
+    totalPatients:    allPatients.length,       // all 1000
+    monitoredPatients: totalMonitored,           // patients with ≥1 assessment
+    totalPages:       Math.ceil(totalMonitored / limit),
+    currentPage:      page,
+    highRiskCount:    recent.filter((a) => a.riskLevel === 'high').length,
+    mediumRiskCount:  recent.filter((a) => a.riskLevel === 'medium').length,
+    lowRiskCount:     recent.filter((a) => a.riskLevel === 'low').length,
     totalAssessments: allAssessments.length,
     alertsToday: recent.filter((a) => {
       const d = new Date(a.timestamp);
-      const today = new Date();
-      return d.toDateString() === today.toDateString();
+      return d.toDateString() === new Date().toDateString();
     }).length,
     autoSimEnabled,
-    patientsWithReadings: patients.map((p) => {
-      const readings = healthMemory.getLatestReadings(p.id, 1);
-      const assessments = healthMemory.getLatestAssessments(p.id, 1);
-      const adherence = healthMemory.getMedicationAdherence(p.id);
-      return {
-        patient: p,
-        latestReading: readings[0] || null,
-        latestAssessment: assessments[0] || null,
-        adherenceRate: adherence.rate,
-      };
-    }),
+    patientsWithReadings: pageSlice,
   };
 
   res.json({ success: true, data: stats });
