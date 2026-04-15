@@ -6,16 +6,19 @@
 
 steps:
   # 1. Build the Docker image
+  # Use explicit -f and context path so Cloud Build never looks for Dockerfile
+  # at /workspace/Dockerfile (the repo root) — it always finds backend/Dockerfile.
   - id: 'build'
     name: 'gcr.io/cloud-builders/docker'
-    dir: 'backend'
     args:
       - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
       - '-t'
       - 'gcr.io/$PROJECT_ID/caresphere-backend:$COMMIT_SHA'
       - '-t'
       - 'gcr.io/$PROJECT_ID/caresphere-backend:latest'
-      - '.'
+      - 'backend'
 
   # 2. Push to Container Registry
   - id: 'push'
