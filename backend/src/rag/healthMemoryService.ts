@@ -4,8 +4,9 @@
  * Architecture: In-memory store (Firestore-compatible interface for Cloud deployment)
  */
 
-import { HealthReading, RiskAssessment, ConversationMessage, Patient } from '../types/health.types';
+import { HealthReading, RiskAssessment, RiskLevel, ConversationMessage, Patient } from '../types/health.types';
 import { generateMalaysianPatients } from './seedGenerator';
+import { v4 as uuidv4 } from 'uuid';
 
 interface HealthDocument {
   id: string;
@@ -310,6 +311,67 @@ Avg O₂: ${baseline.avgOxygenSaturation.toFixed(1)}% | Avg Sleep: ${baseline.av
 
 export const healthMemory = new HealthMemoryService();
 
+/**
+ * Lightweight rule-based risk scorer — used at seed time to create initial
+ * assessments for every patient without calling Gemini.
+ * Mirrors the clinical thresholds in riskAssessmentFlow.ts.
+ */
+function seedRiskAssessment(reading: HealthReading): RiskAssessment {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (reading.oxygenSaturation < 90) { score += 35; reasons.push(`Critical hypoxaemia: SpO₂ ${reading.oxygenSaturation.toFixed(1)}%`); }
+  else if (reading.oxygenSaturation < 93) { score += 22; reasons.push(`Low O₂ saturation: ${reading.oxygenSaturation.toFixed(1)}%`); }
+  else if (reading.oxygenSaturation < 95) { score += 12; reasons.push(`Borderline O₂: ${reading.oxygenSaturation.toFixed(1)}% — monitor`); }
+
+  if (reading.bloodPressure.systolic > 180) { score += 25; reasons.push(`Hypertensive crisis: ${reading.bloodPressure.systolic}/${reading.bloodPressure.diastolic}mmHg`); }
+  else if (reading.bloodPressure.systolic > 160) { score += 18; reasons.push(`Stage 2 hypertension: ${reading.bloodPressure.systolic}mmHg`); }
+  else if (reading.bloodPressure.systolic > 140) { score += 8;  reasons.push(`Elevated BP: ${reading.bloodPressure.systolic}/${reading.bloodPressure.diastolic}mmHg`); }
+
+  if (reading.heartRate > 120) { score += 25; reasons.push(`Severe tachycardia: ${reading.heartRate}bpm`); }
+  else if (reading.heartRate > 100) { score += 15; reasons.push(`Tachycardia: ${reading.heartRate}bpm`); }
+  else if (reading.heartRate < 50) { score += 25; reasons.push(`Bradycardia: ${reading.heartRate}bpm — fall risk`); }
+
+  if (reading.movementScore < 15) { score += 18; reasons.push(`Near-immobility: ${reading.movementScore.toFixed(0)}/100 — high fall risk`); }
+  else if (reading.movementScore < 30) { score += 10; reasons.push(`Low mobility: ${reading.movementScore.toFixed(0)}/100`); }
+
+  if (reading.sleepHours < 3) { score += 18; reasons.push(`Severe sleep deprivation: ${reading.sleepHours.toFixed(1)}h`); }
+  else if (reading.sleepHours < 5) { score += 10; reasons.push(`Poor sleep: ${reading.sleepHours.toFixed(1)}h`); }
+
+  if (reading.temperature > 38.5) { score += 15; reasons.push(`Fever: ${reading.temperature.toFixed(1)}°C`); }
+  else if (reading.temperature < 35.5) { score += 20; reasons.push(`Hypothermia: ${reading.temperature.toFixed(1)}°C`); }
+
+  if (reading.glucoseLevel !== undefined) {
+    if (reading.glucoseLevel > 14) { score += 15; reasons.push(`Hyperglycaemia: ${reading.glucoseLevel.toFixed(1)} mmol/L`); }
+    else if (reading.glucoseLevel < 4) { score += 20; reasons.push(`Hypoglycaemia: ${reading.glucoseLevel.toFixed(1)} mmol/L — urgent`); }
+  }
+
+  if (reasons.length === 0) reasons.push('All vital signs within acceptable range for elderly patient');
+
+  const riskScore = Math.min(100, score);
+  const riskLevel: RiskLevel = riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low';
+
+  const recommendations =
+    riskScore >= 70
+      ? ['Activate emergency response — contact caregiver immediately', 'Call 999 or nearest Emergency Department']
+      : riskScore >= 40
+      ? ['Caregiver notification required', 'Schedule GP consultation within 1–2 days']
+      : ['Continue standard monitoring schedule', 'Encourage gentle physical activity'];
+
+  return {
+    id: uuidv4(),
+    patientId: reading.patientId,
+    timestamp: reading.timestamp,
+    riskLevel,
+    riskScore,
+    reasons,
+    recommendations,
+    geminiReasoning: `Seed assessment (rule-based): ${reasons[0]}. Risk score ${riskScore}/100 — ${riskLevel} risk.`,
+    actions: [],
+    healthReading: reading,
+  };
+}
+
 export function seedDemoData(): void {
   const patients: Patient[] = [
     {
@@ -444,6 +506,10 @@ export function seedDemoData(): void {
     // Compute baseline after seeding
     healthMemory.computeBaseline(patient.id);
 
+    // Seed one rule-based assessment so this patient appears on dashboard immediately
+    const heroLatest = healthMemory.getLatestReadings(patient.id, 1)[0];
+    if (heroLatest) healthMemory.storeAssessment(seedRiskAssessment(heroLatest));
+
     // Seed demo medication schedules
     const medNames = patient.medications.slice(0, 2);
     medNames.forEach((medName, mIdx) => {
@@ -512,6 +578,10 @@ export function seedDemoData(): void {
     }
 
     healthMemory.computeBaseline(gp.id);
+
+    // Seed one rule-based assessment so this patient appears on dashboard immediately
+    const genLatest = healthMemory.getLatestReadings(gp.id, 1)[0];
+    if (genLatest) healthMemory.storeAssessment(seedRiskAssessment(genLatest));
 
     // Seed one medication schedule for the first med (if any)
     if (gp.medications.length > 0) {
