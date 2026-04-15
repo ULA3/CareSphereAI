@@ -5,6 +5,7 @@
  */
 
 import { HealthReading, RiskAssessment, ConversationMessage, Patient } from '../types/health.types';
+import { generateMalaysianPatients } from './seedGenerator';
 
 interface HealthDocument {
   id: string;
@@ -377,29 +378,65 @@ export function seedDemoData(): void {
       },
       createdAt: new Date().toISOString(),
     },
+    {
+      id: 'patient-004',
+      name: 'Dayang binti Musa',
+      age: 65,
+      gender: 'female',
+      conditions: ['Type 2 Diabetes', 'Chronic Kidney Disease Stage 3', 'Mild Depression'],
+      medications: ['Insulin Glargine 20 units', 'Amlodipine 5mg', 'Sertraline 50mg', 'Calcium Carbonate 500mg'],
+      caregiver: {
+        name: 'Azman bin Musa',
+        phone: '+60198887766',
+        email: 'azman.musa@email.com',
+        relationship: 'Husband',
+      },
+      location: {
+        address: 'Taman Sri Sarawak, Jalan Bako',
+        city: 'Kuching',
+        state: 'Sarawak',
+        lat: 1.5497,
+        lng: 110.3592,
+      },
+      createdAt: new Date().toISOString(),
+    },
   ];
 
   patients.forEach((p) => healthMemory.storePatient(p));
 
+  // Patient profiles for realistic seeding:
+  // 0 = Ahmad (diabetic, hypertensive) — warning baseline
+  // 1 = Meenakshi (heart disease) — moderate baseline
+  // 2 = Lim Ah Kow (COPD, AF) — high risk baseline
+  // 3 = Dayang (diabetic, CKD, depression) — stable but monitored
+  const patientProfiles = [
+    { baseHR: 82, baseSystolic: 158, baseDiastolic: 96, baseSleep: 5.0, baseMovement: 35, baseO2: 96, baseGlucose: 10.2 },
+    { baseHR: 78, baseSystolic: 132, baseDiastolic: 84, baseSleep: 6.5, baseMovement: 45, baseO2: 96, baseGlucose: undefined },
+    { baseHR: 98, baseSystolic: 128, baseDiastolic: 80, baseSleep: 5.5, baseMovement: 22, baseO2: 92, baseGlucose: undefined },
+    { baseHR: 74, baseSystolic: 138, baseDiastolic: 88, baseSleep: 7.0, baseMovement: 50, baseO2: 97, baseGlucose: 9.1 },
+  ];
+
   const now = Date.now();
   patients.forEach((patient, pIdx) => {
+    const profile = patientProfiles[pIdx] || patientProfiles[0];
     for (let i = 9; i >= 0; i--) {
       const ts = new Date(now - i * 3600000).toISOString();
-      const baseHR = pIdx === 2 ? 95 : pIdx === 1 ? 78 : 72;
       const reading: HealthReading = {
         id: `reading-${patient.id}-${i}`,
         patientId: patient.id,
         timestamp: ts,
-        heartRate: baseHR + Math.floor(Math.random() * 20 - 10),
-        sleepHours: pIdx === 0 ? 4.5 + Math.random() * 2 : 6 + Math.random() * 2,
-        movementScore: pIdx === 2 ? 20 + Math.random() * 15 : 40 + Math.random() * 40,
+        heartRate: Math.round(profile.baseHR + (Math.random() * 16 - 8)),
+        sleepHours: Math.round((profile.baseSleep + (Math.random() * 1.5 - 0.75)) * 10) / 10,
+        movementScore: Math.round(profile.baseMovement + (Math.random() * 20 - 10)),
         bloodPressure: {
-          systolic: (pIdx === 0 ? 155 : 120) + Math.floor(Math.random() * 20 - 10),
-          diastolic: (pIdx === 0 ? 95 : 80) + Math.floor(Math.random() * 10 - 5),
+          systolic: Math.round(profile.baseSystolic + (Math.random() * 16 - 8)),
+          diastolic: Math.round(profile.baseDiastolic + (Math.random() * 8 - 4)),
         },
-        oxygenSaturation: pIdx === 2 ? 91 + Math.random() * 4 : 96 + Math.random() * 3,
-        temperature: 36.5 + Math.random() * 0.8,
-        glucoseLevel: pIdx === 0 ? 8.5 + Math.random() * 4 : undefined,
+        oxygenSaturation: Math.round((profile.baseO2 + (Math.random() * 2 - 1)) * 10) / 10,
+        temperature: Math.round((36.5 + Math.random() * 0.7) * 10) / 10,
+        glucoseLevel: profile.baseGlucose
+          ? Math.round((profile.baseGlucose + (Math.random() * 3 - 1.5)) * 10) / 10
+          : undefined,
       };
       healthMemory.storeReading(reading);
     }
@@ -441,4 +478,53 @@ export function seedDemoData(): void {
       }
     });
   });
+
+  // ── Bulk-seed 996 generated patients (total = 1000) ───────────────────────
+  const generated = generateMalaysianPatients(996, 5);
+  generated.forEach(({ patient: gp, vitalProfile }, gIdx) => {
+    healthMemory.storePatient(gp);
+
+    // Seed 5 staggered readings per generated patient
+    for (let i = 4; i >= 0; i--) {
+      const ts = new Date(now - (i * 2 + gIdx % 3) * 3600000).toISOString();
+      // Small per-reading jitter — deterministic-ish via index
+      const jitter = (base: number, range: number) =>
+        Math.round((base + ((gIdx * 7 + i * 3) % (range * 2 + 1)) - range) * 10) / 10;
+
+      const reading: HealthReading = {
+        id: `reading-${gp.id}-seed-${i}`,
+        patientId: gp.id,
+        timestamp: ts,
+        heartRate: Math.round(jitter(vitalProfile.baseHR, 8)),
+        sleepHours: Math.max(1, Math.min(12, jitter(vitalProfile.baseSleep, 1))),
+        movementScore: Math.max(0, Math.min(100, Math.round(jitter(vitalProfile.baseMovement, 10)))),
+        bloodPressure: {
+          systolic: Math.round(jitter(vitalProfile.baseSystolic, 8)),
+          diastolic: Math.round(jitter(vitalProfile.baseDiastolic, 5)),
+        },
+        oxygenSaturation: Math.max(85, Math.min(100, jitter(vitalProfile.baseO2, 1))),
+        temperature: Math.max(35, Math.min(40, jitter(vitalProfile.baseTemp, 0.3))),
+        glucoseLevel: vitalProfile.baseGlucose
+          ? Math.max(3, Math.min(22, jitter(vitalProfile.baseGlucose, 1.5)))
+          : undefined,
+      };
+      healthMemory.storeReading(reading);
+    }
+
+    healthMemory.computeBaseline(gp.id);
+
+    // Seed one medication schedule for the first med (if any)
+    if (gp.medications.length > 0) {
+      healthMemory.storeMedication({
+        id: `med-${gp.id}-0`,
+        patientId: gp.id,
+        name: gp.medications[0],
+        dosage: '1 tablet',
+        times: ['08:00', '20:00'],
+        createdAt: new Date().toISOString(),
+      });
+    }
+  });
+
+  console.log(`[CareSphere AI] Seeded ${4 + generated.length} patients (4 hero + ${generated.length} generated)`);
 }

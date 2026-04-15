@@ -57,7 +57,15 @@ export const riskAssessmentFlow = ai.defineFlow(
           }`
         : '';
 
-    const prompt = `You are CareSphere AI, an expert geriatric health monitoring system for Malaysian elderly patients.
+    const prompt = `You are CareSphere AI, an expert geriatric health monitoring system for Malaysian elderly patients, aligned with Malaysian Ministry of Health (MOH) clinical practice guidelines.
+
+MALAYSIAN CLINICAL REFERENCE STANDARDS (MOH Malaysia CPG):
+- Hypertension target for elderly: <140/90 mmHg (MOH CPG Hypertension 2018)
+- Diabetes glucose target (elderly): 6.5–8.0 mmol/L HbA1c (MOH CPG T2DM 2020)
+- SpO₂ alert threshold: <95% requires monitoring, <90% is emergency (MOH CPG COPD)
+- Fall risk: Major cause of elderly hospitalisation in Malaysia — movement score <30 triggers alert
+- Malaysia elderly population: 54% have hypertension, 20% diabetes, 12% heart disease (NHMS 2019)
+- Emergency: Call 999 or nearest KKM hospital A&E
 
 PATIENT HEALTH CONTEXT (from RAG memory system):
 ${healthContext}
@@ -70,16 +78,16 @@ CURRENT HEALTH READING TO ASSESS:
 - Blood Pressure: ${input.reading.bloodPressure.systolic}/${input.reading.bloodPressure.diastolic} mmHg
 - Oxygen Saturation: ${input.reading.oxygenSaturation}%
 - Body Temperature: ${input.reading.temperature}°C
-${input.reading.glucoseLevel ? `- Blood Glucose: ${input.reading.glucoseLevel} mmol/L` : ''}
+${input.reading.glucoseLevel ? `- Blood Glucose: ${input.reading.glucoseLevel} mmol/L (Malaysian diabetes target for elderly: 6.5–8.0 mmol/L)` : ''}
 
-TASK: Perform a comprehensive geriatric health risk assessment. Consider:
-1. Abnormal vital signs (WHO elderly guidelines)
+TASK: Perform a comprehensive geriatric health risk assessment aligned with MOH Malaysia guidelines. Consider:
+1. Abnormal vital signs vs MOH Malaysia CPG thresholds
 2. Patient's chronic conditions and medication interactions
-3. Risk of falls (low movement + certain conditions)
+3. Fall risk assessment (major cause of elderly hospitalisation in Malaysia)
 4. Cardiac risk (BP + HR + existing conditions)
-5. Respiratory risk (O2 saturation)
-6. Metabolic risk (glucose if diabetic)
-7. Sleep deprivation effects on elderly
+5. Respiratory risk (O2 saturation per MOH COPD guidelines)
+6. Metabolic risk (glucose per MOH Diabetes CPG)
+7. Sleep deprivation effects on elderly cognition
 8. Trend patterns from recent readings
 
 Respond ONLY with a valid JSON object in this exact format:
