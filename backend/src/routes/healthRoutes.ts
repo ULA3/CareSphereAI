@@ -303,31 +303,90 @@ router.post('/simulate/:id', async (req: Request, res: Response) => {
 });
 
 // ─── AUTO-SIMULATE ───────────────────────────────────────────────────────────
+//
+// Picks a small random batch of patients every tick (NOT all 1000) and runs
+// risk assessment + emergency actions on medium/high. This keeps Gemini usage
+// sustainable and lets caregiver alerts (Twilio/SendGrid) fire organically
+// during the live demo.
+//
+// Tuning knobs:
+//   AUTO_SIM_BATCH_SIZE    — patients processed per tick (default 8)
+//   AUTO_SIM_INTERVAL_MS   — tick interval (default 20s)
 
 let autoSimInterval: ReturnType<typeof setInterval> | null = null;
 let autoSimEnabled = false;
+let autoSimBusy = false; // prevents overlapping ticks
+
+const AUTO_SIM_BATCH_SIZE = Number(process.env.AUTO_SIM_BATCH_SIZE || 8);
+const AUTO_SIM_INTERVAL_MS = Number(process.env.AUTO_SIM_INTERVAL_MS || 20_000);
+
+function pickRandomPatients(pool: ReturnType<typeof healthMemory.getAllPatients>, n: number) {
+  if (pool.length <= n) return pool;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n);
+}
 
 router.post('/auto-simulate/start', (_req: Request, res: Response) => {
   if (autoSimEnabled) return res.json({ success: true, data: { status: 'already running' } });
 
   autoSimEnabled = true;
-  autoSimInterval = setInterval(async () => {
-    const patients = healthMemory.getAllPatients();
-    for (const patient of patients) {
-      const roll = Math.random();
-      const scenario = roll < 0.7 ? 'normal' : roll < 0.9 ? 'warning' : 'critical';
-      const scenarios = {
-        normal: { heartRate: 68 + Math.random() * 20, sleepHours: 6 + Math.random() * 2, movementScore: 50 + Math.random() * 30, bloodPressure: { systolic: 120 + Math.random() * 20, diastolic: 78 + Math.random() * 10 }, oxygenSaturation: 96 + Math.random() * 3, temperature: 36.4 + Math.random() * 0.8 },
-        warning: { heartRate: 100 + Math.random() * 15, sleepHours: 3 + Math.random() * 2, movementScore: 15 + Math.random() * 20, bloodPressure: { systolic: 150 + Math.random() * 20, diastolic: 92 + Math.random() * 10 }, oxygenSaturation: 92 + Math.random() * 3, temperature: 37.2 + Math.random() * 0.8 },
-        critical: { heartRate: 125 + Math.random() * 20, sleepHours: 1 + Math.random() * 2, movementScore: 5 + Math.random() * 10, bloodPressure: { systolic: 170 + Math.random() * 20, diastolic: 105 + Math.random() * 10 }, oxygenSaturation: 86 + Math.random() * 4, temperature: 38 + Math.random() * 0.8 },
-      };
-      try {
-        await runRiskAssessment(patient.id, scenarios[scenario] as any);
-      } catch (_err) { /* ignore */ }
-    }
-  }, 30000);
+  console.log(`[auto-sim] ▶ starting — batch=${AUTO_SIM_BATCH_SIZE} interval=${AUTO_SIM_INTERVAL_MS}ms`);
 
-  res.json({ success: true, data: { status: 'started', interval: '30s' } });
+  const tick = async () => {
+    if (autoSimBusy) {
+      console.log('[auto-sim] ⏭ skipping tick (previous still running)');
+      return;
+    }
+    autoSimBusy = true;
+    try {
+      const pool = healthMemory.getAllPatients();
+      const batch = pickRandomPatients(pool, AUTO_SIM_BATCH_SIZE);
+
+      for (const patient of batch) {
+        const roll = Math.random();
+        const scenario = roll < 0.7 ? 'normal' : roll < 0.9 ? 'warning' : 'critical';
+        const scenarios = {
+          normal:   { heartRate: 68 + Math.random() * 20,  sleepHours: 6 + Math.random() * 2,   movementScore: 50 + Math.random() * 30, bloodPressure: { systolic: 120 + Math.random() * 20, diastolic: 78 + Math.random() * 10 },  oxygenSaturation: 96 + Math.random() * 3, temperature: 36.4 + Math.random() * 0.8 },
+          warning:  { heartRate: 100 + Math.random() * 15, sleepHours: 3 + Math.random() * 2,   movementScore: 15 + Math.random() * 20, bloodPressure: { systolic: 150 + Math.random() * 20, diastolic: 92 + Math.random() * 10 },  oxygenSaturation: 92 + Math.random() * 3, temperature: 37.2 + Math.random() * 0.8 },
+          critical: { heartRate: 125 + Math.random() * 20, sleepHours: 1 + Math.random() * 2,   movementScore: 5  + Math.random() * 10, bloodPressure: { systolic: 170 + Math.random() * 20, diastolic: 105 + Math.random() * 10 }, oxygenSaturation: 86 + Math.random() * 4, temperature: 38   + Math.random() * 0.8 },
+        };
+
+        try {
+          const assessment = await runRiskAssessment(patient.id, scenarios[scenario] as any);
+
+          // Fire the autonomous agent on medium/high — this is what causes the
+          // Twilio SMS / SendGrid email to actually dispatch during auto-sim.
+          if (assessment.riskLevel === 'medium' || assessment.riskLevel === 'high') {
+            await runEmergencyActions(
+              patient.id,
+              assessment.riskLevel,
+              assessment.riskScore,
+              assessment.reasons,
+              assessment.recommendations,
+            );
+          }
+        } catch (err) {
+          console.warn(`[auto-sim] patient ${patient.id} failed:`, String(err).substring(0, 80));
+        }
+      }
+    } finally {
+      autoSimBusy = false;
+    }
+  };
+
+  // Fire one immediately so the dashboard updates without waiting for the first tick
+  tick().catch(() => { /* already logged inside */ });
+  autoSimInterval = setInterval(tick, AUTO_SIM_INTERVAL_MS);
+
+  res.json({
+    success: true,
+    data: {
+      status: 'started',
+      batchSize: AUTO_SIM_BATCH_SIZE,
+      intervalMs: AUTO_SIM_INTERVAL_MS,
+      note: `Processes ${AUTO_SIM_BATCH_SIZE} random patients every ${AUTO_SIM_INTERVAL_MS / 1000}s. Emergency agent fires on medium/high.`,
+    },
+  });
 });
 
 router.post('/auto-simulate/stop', (_req: Request, res: Response) => {
