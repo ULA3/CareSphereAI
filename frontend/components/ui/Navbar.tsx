@@ -91,7 +91,7 @@ export default function Navbar() {
     setSearchOpen(false);
     setQuery('');
     setResults([]);
-    router.push(`/trends?patientId=${patient.id}`);
+    router.push(`/patients/${patient.id}`);
   }, [router]);
 
   return (
@@ -227,9 +227,9 @@ export default function Navbar() {
               ) : (
                 <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
                   {recentAlerts.map((alert) => (
-                    <li key={alert.id} className="px-4 py-3 hover:bg-slate-50 transition-colors">
+                    <li key={alert.id} className="px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => { setBellOpen(false); router.push(`/patients/${alert.patientId}`); }}>
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">{alert.patientId.replace('patient-', 'Patient #')}</p>
+                        <p className="text-sm font-medium text-slate-900 truncate">{allPatients.find((p) => p.id === alert.patientId)?.name ?? alert.patientId}</p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           alert.riskLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                         }`}>{alert.riskLevel.toUpperCase()}</span>

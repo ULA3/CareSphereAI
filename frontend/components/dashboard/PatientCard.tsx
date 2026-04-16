@@ -36,8 +36,8 @@ export default function PatientCard({
   return (
     <div className={`bg-white rounded-xl border border-slate-200 shadow-card border-l-4 ${borderAccent} transition-all duration-200 hover:shadow-card-md ${sosActive ? 'ring-2 ring-red-400' : ''}`}>
 
-      {/* ── Card Header ─────────────────────────────────────────── */}
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between border-b border-slate-100">
+      {/* ── Card Header — click to open patient drilldown ───────── */}
+      <Link href={`/patients/${patient.id}`} className="px-4 pt-4 pb-3 flex items-start justify-between border-b border-slate-100 hover:bg-slate-50 transition-colors rounded-t-xl">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-teal-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {patient.name.charAt(0).toUpperCase()}
@@ -59,7 +59,7 @@ export default function PatientCard({
         {latestAssessment && (
           <RiskBadge level={latestAssessment.riskLevel} score={latestAssessment.riskScore} size="sm" />
         )}
-      </div>
+      </Link>
 
       <div className="px-4 py-3 space-y-3">
         {/* ── Medication Adherence ─────────────────────────────── */}

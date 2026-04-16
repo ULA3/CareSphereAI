@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus, Heart, CheckCircle, AlertCircle, Plus, X, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -117,6 +117,8 @@ export default function OnboardPage() {
       });
       setNewPatientId(result.id);
       setSuccess(true);
+      // Auto-redirect to patient drilldown after 3 seconds
+      setTimeout(() => router.push(`/patients/${result.id}`), 3000);
     } catch (err) {
       setError('Failed to register patient. Please try again.');
     } finally {
@@ -140,13 +142,14 @@ export default function OnboardPage() {
               ? 'telah ditambah ke sistem CareSphere AI. Pemantauan bermula sekarang.'
               : 'has been added to CareSphere AI. Monitoring starts now.'}
           </p>
-          <p className="text-xs text-slate-400 mb-6">Patient ID: {newPatientId}</p>
+          <p className="text-xs text-slate-400 mb-2">Patient ID: {newPatientId}</p>
+          <p className="text-xs text-teal-600 mb-6 animate-pulse">Redirecting to patient profile in 3 seconds…</p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push(`/patients/${newPatientId}`)}
               className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-colors"
             >
-              {lang === 'bm' ? 'Ke Dashboard' : 'Go to Dashboard'}
+              {lang === 'bm' ? 'Lihat Profil Pesakit' : 'View Patient Profile'}
             </button>
             <button
               onClick={() => { setSuccess(false); setStep(1); setForm({ name: '', age: '', gender: 'male', conditions: [], medications: [], customCondition: '', customMedication: '', caregiverName: '', caregiverPhone: '', caregiverEmail: '', caregiverRelationship: 'Anak / Child', address: '', city: '', state: 'Wilayah Persekutuan' }); }}
