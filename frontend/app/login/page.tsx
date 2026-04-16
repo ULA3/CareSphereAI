@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('admin@caresphere.my');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +23,7 @@ export default function LoginPage() {
     if (ok) {
       router.push('/');
     } else {
-      setError('Invalid credentials. Use the demo credentials below.');
+      setError('Invalid email or password. Please try again.');
       setShake(true);
       setTimeout(() => setShake(false), 500);
     }
@@ -125,21 +125,6 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Demo credentials hint */}
-            <div className="mt-5 bg-brand-50 border border-brand-100 rounded-xl p-4">
-              <p className="text-xs font-semibold text-brand-700 mb-2">🔑 Demo Credentials</p>
-              <div className="space-y-1 font-mono text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Email:</span>
-                  <button onClick={() => setEmail('admin@caresphere.my')} className="text-brand-600 hover:underline">admin@caresphere.my</button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Password:</span>
-                  <button onClick={() => setPassword('demo2030')} className="text-brand-600 hover:underline">demo2030</button>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-2">Click to auto-fill</p>
-            </div>
           </div>
         </div>
       </div>
