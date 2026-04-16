@@ -470,6 +470,100 @@ router.get('/dashboard/stats', (req: Request, res: Response) => {
   res.json({ success: true, data: stats });
 });
 
+// ─── SSE LIVE STREAM ─────────────────────────────────────────────────────────
+// Clients connect with EventSource. Sends stats every 15s + heartbeat every 30s.
+router.get('/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  const sendStats = () => {
+    try {
+      const allAssessments = healthMemory.getAllAssessments ? healthMemory.getAllAssessments() : [];
+      const highRiskCount   = allAssessments.filter((a: any) => a.riskLevel === 'high').length;
+      const mediumRiskCount = allAssessments.filter((a: any) => a.riskLevel === 'medium').length;
+      const lowRiskCount    = allAssessments.filter((a: any) => a.riskLevel === 'low').length;
+      const today = new Date().toISOString().split('T')[0];
+      const alertsToday     = allAssessments.filter((a: any) => a.timestamp?.startsWith(today)).length;
+
+      const payload = {
+        type: 'stats',
+        highRiskCount,
+        mediumRiskCount,
+        lowRiskCount,
+        totalAssessments: allAssessments.length,
+        alertsToday,
+        timestamp: new Date().toISOString(),
+      };
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    }
+  };
+
+  // Send immediately on connect
+  sendStats();
+
+  // Then every 15 seconds
+  const statsInterval = setInterval(sendStats, 15000);
+
+  // Heartbeat every 30s to prevent proxy timeouts
+  const heartbeatInterval = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(statsInterval);
+    clearInterval(heartbeatInterval);
+    console.log('[SSE] Client disconnected');
+  });
+});
+
+// ─── DEMO ALERT (hackathon demo button) ──────────────────────────────────────
+router.post('/demo-alert', async (req: Request, res: Response) => {
+  try {
+    const patients = healthMemory.getAllPatients();
+    // Prefer a patient named Ahmad, fallback to first patient
+    const target = patients.find((p) => p.name.toLowerCase().includes('ahmad')) || patients[0];
+    if (!target) return res.status(404).json({ success: false, error: 'No patients in system' });
+
+    const criticalVitals = {
+      heartRate: 138,
+      sleepHours: 1.5,
+      movementScore: 4,
+      bloodPressure: { systolic: 182, diastolic: 112 },
+      oxygenSaturation: 87,
+      temperature: 38.6,
+    };
+
+    const assessment = await runRiskAssessment(target.id, criticalVitals as any);
+
+    if (assessment.riskLevel === 'medium' || assessment.riskLevel === 'high') {
+      await runEmergencyActions(
+        target.id,
+        assessment.riskLevel,
+        assessment.riskScore,
+        assessment.reasons,
+        assessment.recommendations,
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        patient: { name: target.name, id: target.id },
+        assessment,
+        message: `Demo alert triggered for ${target.name} — caregiver notified via SMS + Email`,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 // ─── ALERTS (Demo/Test) ─────────────────────────────────────────────────────
 /**
  * Fire a test caregiver alert for any patient — proves Twilio/SendGrid is live.

@@ -28,6 +28,8 @@ function DashboardContent() {
   const [nameFilter, setNameFilter]     = useState('');
   const [highlightId]                   = useState(searchParams.get('highlight') || '');
   const [page, setPage]                 = useState(1);
+  const [sseConnected, setSseConnected] = useState(false);
+  const [demoLoading, setDemoLoading]   = useState(false);
 
   const fetchData = useCallback(async (p?: number) => {
     const pageNum = p ?? page;
@@ -49,9 +51,32 @@ function DashboardContent() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, autoSim ? 15000 : 30000);
+    const interval = setInterval(fetchData, sseConnected ? 60000 : (autoSim ? 15000 : 30000));
     return () => clearInterval(interval);
-  }, [fetchData, autoSim]);
+  }, [fetchData, autoSim, sseConnected]);
+
+  useEffect(() => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const es = new EventSource(`${API_URL}/api/health/stream`);
+
+    es.onopen = () => setSseConnected(true);
+    es.onerror = () => setSseConnected(false);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'stats') {
+          // Trigger a full data refresh when server pushes new stats
+          fetchData();
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    return () => {
+      es.close();
+      setSseConnected(false);
+    };
+  }, []); // run once on mount — fetchData is stable via useCallback
 
   const handleSimulate = async (patientId: string, scenario: 'normal' | 'warning' | 'critical') => {
     setSimLoading(true);
@@ -90,6 +115,24 @@ function DashboardContent() {
       setNotification({ msg: `Auto-sim error: ${err}`, type: 'error' });
     } finally {
       setAutoSimToggling(false);
+    }
+  };
+
+  const handleDemoAlert = async () => {
+    setDemoLoading(true);
+    try {
+      const result = await api.triggerDemoAlert();
+      setNotification({
+        msg: `🚨 Demo triggered for ${result.patient.name} — ${result.assessment.riskLevel.toUpperCase()} risk (score: ${result.assessment.riskScore}). Caregiver alerted!`,
+        type: result.assessment.riskLevel === 'high' ? 'error' : 'warning',
+      });
+      await fetchData();
+      setTimeout(() => setNotification(null), 8000);
+    } catch (err) {
+      setNotification({ msg: `Demo failed: ${err}`, type: 'error' });
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -156,6 +199,24 @@ function DashboardContent() {
             ) : t.autoSimulate}
           </button>
 
+          <button
+            onClick={handleDemoAlert}
+            disabled={demoLoading}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border bg-red-50 border-red-200 text-red-700 hover:bg-red-100 transition-all disabled:opacity-50"
+          >
+            {demoLoading ? (
+              <span className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5" />
+            )}
+            Demo Alert
+          </button>
+          {sseConnected && (
+            <span className="flex items-center gap-1.5 text-xs text-teal-600 font-medium bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+              LIVE
+            </span>
+          )}
           <span className="text-slate-400 text-xs hidden sm:block">
             Updated {lastUpdate.toLocaleTimeString()}
           </span>

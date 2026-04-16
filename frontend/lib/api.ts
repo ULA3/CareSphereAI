@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const TIMEOUT_MS = 15000; // 15 s per attempt
 const MAX_RETRIES = 2;
 
@@ -280,6 +280,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Demo alert
+  triggerDemoAlert: () =>
+    request<{ patient: { name: string; id: string }; assessment: RiskAssessment; message: string }>(
+      '/api/health/demo-alert',
+      { method: 'POST' }
+    ),
 
   // Companion
   chat: (patientId: string, message: string, sessionType?: string, language?: 'en' | 'bm') =>

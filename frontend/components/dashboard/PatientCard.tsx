@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Activity, Heart, Moon, Zap, Thermometer, Wind, AlertOctagon, Pill, MapPin, User } from 'lucide-react';
 import RiskBadge from '@/components/ui/RiskBadge';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -102,6 +103,16 @@ export default function PatientCard({
             <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">{latestAssessment.geminiReasoning}</p>
           </div>
         )}
+
+        {/* ── View Profile Link ────────────────────────────────── */}
+        <div className="text-right">
+          <Link
+            href={`/patients/${patient.id}`}
+            className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors hover:underline"
+          >
+            View Profile →
+          </Link>
+        </div>
 
         {/* ── Simulate Buttons ─────────────────────────────────── */}
         <div className="flex gap-1.5">

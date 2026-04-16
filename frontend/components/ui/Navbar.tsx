@@ -3,13 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, ChevronDown, User, Heart, X, Activity, MapPin } from 'lucide-react';
-import { api, Patient } from '@/lib/api';
+import { Search, Bell, ChevronDown, User, Heart, X, Activity, MapPin, LogOut } from 'lucide-react';
+import { api, Patient, RiskAssessment } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function Navbar() {
   const router = useRouter();
   const { lang, setLang } = useLanguage();
+  const { logout } = useAuth();
+  const { addToast } = useToast();
 
   const [query, setQuery]               = useState('');
   const [results, setResults]           = useState<Patient[]>([]);
@@ -18,8 +22,13 @@ export default function Navbar() {
   const [userOpen, setUserOpen]         = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
 
+  const [bellOpen, setBellOpen]         = useState(false);
+  const [recentAlerts, setRecentAlerts] = useState<RiskAssessment[]>([]);
+  const [bellLoading, setBellLoading]   = useState(false);
+
   const searchRef = useRef<HTMLDivElement>(null);
   const userRef   = useRef<HTMLDivElement>(null);
+  const bellRef   = useRef<HTMLDivElement>(null);
 
   // Load patients once for search
   useEffect(() => {
@@ -27,6 +36,22 @@ export default function Navbar() {
       .then((pts) => { setAllPatients(pts); setProfileLoaded(true); })
       .catch(() => setProfileLoaded(true));
   }, []);
+
+  // Fetch alerts when bell opens
+  useEffect(() => {
+    if (!bellOpen) return;
+    setBellLoading(true);
+    api.getAllAssessments()
+      .then((assessments) => {
+        const filtered = assessments
+          .filter((a) => a.riskLevel === 'high' || a.riskLevel === 'medium')
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 5);
+        setRecentAlerts(filtered);
+      })
+      .catch(() => setRecentAlerts([]))
+      .finally(() => setBellLoading(false));
+  }, [bellOpen]);
 
   // Filter patients client-side
   useEffect(() => {
@@ -54,6 +79,9 @@ export default function Navbar() {
       if (userRef.current && !userRef.current.contains(e.target as Node)) {
         setUserOpen(false);
       }
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
+      }
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -65,12 +93,6 @@ export default function Navbar() {
     setResults([]);
     router.push(`/trends?patientId=${patient.id}`);
   }, [router]);
-
-  const riskColor: Record<string, string> = {
-    high:   'text-red-600 bg-red-50',
-    medium: 'text-amber-600 bg-amber-50',
-    low:    'text-green-600 bg-green-50',
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 flex items-center px-4 gap-4 shadow-sm">
@@ -180,10 +202,50 @@ export default function Navbar() {
         </div>
 
         {/* Notification Bell */}
-        <button className="relative w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors">
-          <Bell className="w-4.5 h-4.5 text-slate-600" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white" />
-        </button>
+        <div ref={bellRef} className="relative">
+          <button
+            onClick={() => setBellOpen((v) => !v)}
+            className="relative w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
+          >
+            <Bell className="w-4.5 h-4.5 text-slate-600" />
+            {recentAlerts.some((a) => a.riskLevel === 'high') && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white animate-pulse" />
+            )}
+            {!bellOpen && recentAlerts.length === 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white" />
+            )}
+          </button>
+
+          {bellOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 animate-slide-up">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <p className="font-semibold text-slate-900 text-sm">Recent Alerts</p>
+                {bellLoading && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              {recentAlerts.length === 0 && !bellLoading ? (
+                <div className="px-4 py-6 text-center text-sm text-slate-400">No recent alerts</div>
+              ) : (
+                <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                  {recentAlerts.map((alert) => (
+                    <li key={alert.id} className="px-4 py-3 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-slate-900 truncate">{alert.patientId.replace('patient-', 'Patient #')}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          alert.riskLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                        }`}>{alert.riskLevel.toUpperCase()}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 truncate">{alert.reasons[0]}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{new Date(alert.timestamp).toLocaleTimeString()}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50">
+                <a href="/alerts" className="text-xs text-brand-600 hover:text-brand-700 font-medium">View all alerts →</a>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* User Menu */}
         <div ref={userRef} className="relative">
@@ -220,6 +282,15 @@ export default function Navbar() {
                     Online
                   </span>
                 </div>
+              </div>
+              <div className="p-1.5 border-t border-slate-100">
+                <button
+                  onClick={() => { logout(); addToast('Signed out successfully', 'info'); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
               </div>
             </div>
           )}

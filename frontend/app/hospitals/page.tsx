@@ -5,6 +5,29 @@ import { MapPin, Phone, Clock, AlertCircle, ChevronDown, Building2, Ambulance } 
 import { api, HospitalData, Patient } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 
+const CITY_COORDS: Record<string, [number, number]> = {
+  'Kuala Lumpur': [3.1390, 101.6869],
+  'Petaling Jaya': [3.1073, 101.6067],
+  'Shah Alam': [3.0738, 101.5183],
+  'Subang Jaya': [3.0497, 101.5851],
+  'Klang': [3.0449, 101.4459],
+  'Johor Bahru': [1.4927, 103.7414],
+  'Ipoh': [4.5975, 101.0901],
+  'Penang': [5.4141, 100.3288],
+  'George Town': [5.4141, 100.3288],
+  'Kota Bharu': [6.1248, 102.2381],
+  'Kuching': [1.5533, 110.3592],
+  'Kota Kinabalu': [5.9804, 116.0735],
+  'Alor Setar': [6.1248, 100.3673],
+  'Seremban': [2.7260, 101.9424],
+  'Melaka': [2.1896, 102.2501],
+  'Kuantan': [3.8077, 103.3260],
+  'Putrajaya': [2.9264, 101.6964],
+  'Cyberjaya': [2.9213, 101.6559],
+  'Ampang': [3.1478, 101.7489],
+  'Cheras': [3.0835, 101.7330],
+};
+
 export default function HospitalsPage() {
   const { t } = useLanguage();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -128,109 +151,33 @@ export default function HospitalsPage() {
                 Hospital Map
               </h2>
 
-              {/* SVG map — fully self-contained, no external requests */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-card" style={{ height: '420px' }}>
-                <svg
-                  width="100%"
-                  height="100%"
-                  viewBox="0 0 600 420"
-                  xmlns="http://www.w3.org/2000/svg"
-                  style={{ display: 'block', borderRadius: '12px', background: '#F8FAFC' }}
-                >
-                  {/* Grid lines */}
-                  {Array.from({ length: 15 }).map((_, i) => (
-                    <line key={`h${i}`} x1="0" y1={i * 30} x2="600" y2={i * 30} stroke="rgba(0,0,0,0.04)" strokeWidth="1" />
-                  ))}
-                  {Array.from({ length: 21 }).map((_, i) => (
-                    <line key={`v${i}`} x1={i * 30} y1="0" x2={i * 30} y2="420" stroke="rgba(0,0,0,0.04)" strokeWidth="1" />
-                  ))}
-
-                  {/* Roads */}
-                  <line x1="0" y1="168" x2="600" y2="168" stroke="#0d9488" strokeWidth="2.5" strokeOpacity="0.2" />
-                  <line x1="0" y1="273" x2="600" y2="273" stroke="#0d9488" strokeWidth="1.5" strokeOpacity="0.12" />
-                  <line x1="180" y1="0" x2="180" y2="420" stroke="#0d9488" strokeWidth="2.5" strokeOpacity="0.2" />
-                  <line x1="360" y1="0" x2="360" y2="420" stroke="#0d9488" strokeWidth="1.5" strokeOpacity="0.12" />
-                  <line x1="90" y1="0" x2="330" y2="420" stroke="#0d9488" strokeWidth="1" strokeOpacity="0.08" strokeDasharray="6,10" />
-                  <line x1="270" y1="0" x2="510" y2="420" stroke="#0d9488" strokeWidth="1" strokeOpacity="0.08" strokeDasharray="6,10" />
-
-                  {/* City label */}
-                  <rect x="12" y="12" width="160" height="28" rx="6" fill="#fff" stroke="#E2E8F0" strokeWidth="1" />
-                  <circle cx="28" cy="26" r="5" fill="#0d9488" />
-                  <text x="38" y="30" fill="#334155" fontSize="11" fontWeight="600" fontFamily="sans-serif">
-                    {hospitalData.patientCity}, Malaysia
-                  </text>
-
-                  {/* Hospital pins */}
-                  {(() => {
-                    const positions = [
-                      { x: 180, y: 160 },
-                      { x: 348, y: 218 },
-                      { x: 108, y: 252 },
-                      { x: 432, y: 126 },
-                      { x: 270, y: 286 },
-                      { x: 372, y: 84  },
-                    ];
-                    return hospitalData.hospitals.slice(0, 6).map((hospital, idx) => {
-                      const pos = positions[idx] ?? { x: 120 + idx * 70, y: 150 + idx * 40 };
-                      const isFirst = idx === 0;
-                      const color = isFirst ? '#0d9488' : '#ef4444';
-                      const labelX = pos.x > 480 ? pos.x - 8 : pos.x + 14;
-                      const labelAnchor = pos.x > 480 ? 'end' : 'start';
-                      const shortName = hospital.name.length > 22 ? hospital.name.slice(0, 21) + '…' : hospital.name;
-                      return (
-                        <g key={hospital.id}>
-                          {/* Pin stem */}
-                          <line x1={pos.x} y1={pos.y} x2={pos.x} y2={pos.y + 14} stroke={color} strokeWidth="1.5" strokeOpacity="0.8" />
-                          {/* Pin circle */}
-                          <circle cx={pos.x} cy={pos.y} r="12" fill={color} fillOpacity="0.15" stroke={color} strokeWidth="1.5" />
-                          <circle cx={pos.x} cy={pos.y} r="7" fill={color} />
-                          {/* Index number */}
-                          <text x={pos.x} y={pos.y + 4} textAnchor="middle" fill="white" fontSize="8" fontWeight="700" fontFamily="sans-serif">
-                            {idx + 1}
-                          </text>
-                          {/* Name label */}
-                          <rect
-                            x={labelAnchor === 'start' ? labelX - 2 : labelX - hospital.name.slice(0, 22).length * 5.5}
-                            y={pos.y - 9}
-                            width={Math.min(hospital.name.length, 22) * 5.5 + 8}
-                            height="16"
-                            rx="3"
-                            fill="#fff"
-                            fillOpacity="0.9"
-                            stroke="#E2E8F0"
-                            strokeWidth="0.5"
-                          />
-                          <text x={labelX} y={pos.y + 3} textAnchor={labelAnchor} fill="#334155" fontSize="9.5" fontFamily="sans-serif">
-                            {shortName}
-                          </text>
-                          {hospital.emergencyAvailable && (
-                            <text x={labelX} y={pos.y + 15} textAnchor={labelAnchor} fill="#dc2626" fontSize="8" fontFamily="sans-serif">
-                              24h A&E
-                            </text>
-                          )}
-                        </g>
-                      );
-                    });
-                  })()}
-
-                  {/* Legend */}
-                  <rect x="12" y="378" width="138" height="34" rx="6" fill="#fff" stroke="#E2E8F0" strokeWidth="1" />
-                  <circle cx="26" cy="390" r="5" fill="#0d9488" />
-                  <text x="36" y="394" fill="#475569" fontSize="10" fontFamily="sans-serif">Recommended</text>
-                  <circle cx="26" cy="405" r="5" fill="#ef4444" />
-                  <text x="36" y="409" fill="#475569" fontSize="10" fontFamily="sans-serif">Other hospitals</text>
-
-                  {/* Open Maps link area */}
-                  <rect x="462" y="390" width="126" height="22" rx="6" fill="#2563eb" />
-                  <text x="525" y="405" textAnchor="middle" fill="white" fontSize="10" fontWeight="600" fontFamily="sans-serif">
-                    ↗ Open in Maps
-                  </text>
-                  {/* invisible clickable overlay */}
-                  <a href={`https://www.google.com/maps/search/hospital+near+${encodeURIComponent(hospitalData.patientCity + ' Malaysia')}`} target="_blank" rel="noopener noreferrer">
-                    <rect x="462" y="390" width="126" height="22" rx="6" fill="transparent" cursor="pointer" />
-                  </a>
-                </svg>
-              </div>
+              {/* OpenStreetMap iframe */}
+              {(() => {
+                const coords = CITY_COORDS[hospitalData.patientCity] || [3.1390, 101.6869];
+                const [lat, lng] = coords;
+                const delta = 0.05;
+                const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
+                const osmUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden" style={{ height: '420px' }}>
+                    <iframe
+                      src={osmUrl}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 'none', display: 'block' }}
+                      title={`Map of ${hospitalData.patientCity}`}
+                      loading="lazy"
+                    />
+                  </div>
+                );
+              })()}
+              <a
+                href={`https://www.openstreetmap.org/search?query=hospital+${encodeURIComponent(hospitalData.patientCity + ' Malaysia')}`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium mt-2"
+              >
+                <MapPin className="w-3.5 h-3.5" /> Open full map →
+              </a>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 text-amber-700 mb-2">
                   <AlertCircle className="w-4 h-4" />
