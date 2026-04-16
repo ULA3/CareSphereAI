@@ -6,23 +6,21 @@ interface ThemeCtx { theme: Theme; toggleTheme: () => void; isDark: boolean; }
 const ThemeContext = createContext<ThemeCtx>({ theme: 'light', toggleTheme: () => {}, isDark: false });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light');
+  // Read the class that the inline <script> already applied — avoids any flash
+  const [theme, setTheme] = useState<Theme>(() => {
+    // During SSR this runs on server — default light; client picks it up from DOM
+    if (typeof window === 'undefined') return 'light';
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  });
 
+  // Keep DOM class and localStorage in sync whenever theme changes
   useEffect(() => {
-    const saved = localStorage.getItem('cs-theme') as Theme | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initial = saved ?? (prefersDark ? 'dark' : 'light');
-    setTheme(initial);
-    document.documentElement.classList.toggle('dark', initial === 'dark');
-  }, []);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('cs-theme', theme);
+  }, [theme]);
 
   const toggleTheme = () => {
-    setTheme((prev) => {
-      const next = prev === 'light' ? 'dark' : 'light';
-      localStorage.setItem('cs-theme', next);
-      document.documentElement.classList.toggle('dark', next === 'dark');
-      return next;
-    });
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   return (

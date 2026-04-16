@@ -12,9 +12,26 @@ export const metadata: Metadata = {
   keywords: ['healthcare', 'AI', 'elderly', 'monitoring', 'Gemini', 'Malaysia'],
 };
 
+// Inline script runs synchronously BEFORE any CSS or React hydration —
+// this is the correct pattern for Next.js App Router dark mode without next-themes.
+const themeScript = `(function(){
+  try {
+    var saved = localStorage.getItem('cs-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var isDark = saved === 'dark' || (saved === null && prefersDark);
+    if (isDark) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  } catch(e) {}
+})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      {/* suppressHydrationWarning: prevents React from resetting the `dark`
+          class that the inline script adds before hydration completes */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen antialiased">
         <AuthProvider>
           <ThemeProvider>
