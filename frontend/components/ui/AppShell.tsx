@@ -12,7 +12,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Navbar />
       <div className="flex min-h-screen pt-16">
         <Sidebar />
-        <main className="flex-1 ml-64 min-h-[calc(100vh-4rem)] p-6 overflow-auto">
+        <main className="flex-1 ml-64 min-h-[calc(100vh-4rem)] p-6 overflow-auto bg-app dark:bg-slate-900">
           {children}
         </main>
       </div>

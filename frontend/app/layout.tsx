@@ -3,6 +3,7 @@ import './globals.css';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import AppShell from '@/components/ui/AppShell';
 
 export const metadata: Metadata = {
@@ -16,11 +17,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="bg-app text-slate-900 min-h-screen antialiased">
         <AuthProvider>
-          <LanguageProvider>
-            <ToastProvider>
-              <AppShell>{children}</AppShell>
-            </ToastProvider>
-          </LanguageProvider>
+          <ThemeProvider>
+            <LanguageProvider>
+              <ToastProvider>
+                <AppShell>{children}</AppShell>
+              </ToastProvider>
+            </LanguageProvider>
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>

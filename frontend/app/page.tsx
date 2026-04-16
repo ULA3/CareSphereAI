@@ -66,7 +66,6 @@ function DashboardContent() {
       try {
         const data = JSON.parse(e.data);
         if (data.type === 'stats') {
-          // Trigger a full data refresh when server pushes new stats
           fetchData();
         }
       } catch { /* ignore parse errors */ }
@@ -148,7 +147,7 @@ function DashboardContent() {
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center">
           <div className="w-14 h-14 border-4 border-brand-100 border-t-brand-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-500 font-medium">{t.loading}</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">{t.loading}</p>
         </div>
       </div>
     );
@@ -160,12 +159,12 @@ function DashboardContent() {
       {/* ── Toast Notification ────────────────────────────────────── */}
       {notification && (
         <div className={`fixed top-20 right-4 z-50 max-w-sm p-4 rounded-xl border shadow-card-lg animate-slide-up flex items-start gap-3 ${
-          notification.type === 'error'   ? 'bg-red-50 border-red-200 text-red-800' :
-          notification.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' :
-          'bg-green-50 border-green-200 text-green-800'
+          notification.type === 'error'   ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-400' :
+          notification.type === 'warning' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-400' :
+          'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50 text-green-800 dark:text-green-400'
         }`}>
           {notification.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
           ) : (
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           )}
@@ -176,8 +175,8 @@ function DashboardContent() {
       {/* ── Page Header ───────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t.dashboardTitle}</h1>
-          <p className="text-slate-500 mt-0.5 text-sm">{t.dashboardSubtitle}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{t.dashboardTitle}</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-0.5 text-sm">{t.dashboardSubtitle}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Auto-sim toggle */}
@@ -186,8 +185,8 @@ function DashboardContent() {
             disabled={autoSimToggling}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
               autoSim
-                ? 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800/50 text-teal-700 dark:text-teal-400 hover:bg-teal-100 dark:hover:bg-teal-900/30'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
             } disabled:opacity-50`}
           >
             {autoSim ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -202,7 +201,7 @@ function DashboardContent() {
           <button
             onClick={handleDemoAlert}
             disabled={demoLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border bg-red-50 border-red-200 text-red-700 hover:bg-red-100 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all disabled:opacity-50"
           >
             {demoLoading ? (
               <span className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
@@ -212,16 +211,16 @@ function DashboardContent() {
             Demo Alert
           </button>
           {sseConnected && (
-            <span className="flex items-center gap-1.5 text-xs text-teal-600 font-medium bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-lg">
+            <span className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 font-medium bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/50 px-2.5 py-1 rounded-lg">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
               LIVE
             </span>
           )}
-          <span className="text-slate-400 text-xs hidden sm:block">
+          <span className="text-slate-400 dark:text-slate-500 text-xs hidden sm:block">
             Updated {lastUpdate.toLocaleTimeString()}
           </span>
           <button onClick={() => fetchData()}
-            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors shadow-card">
+            className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-card">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -229,9 +228,9 @@ function DashboardContent() {
 
       {/* ── Auto-sim Live Strip ───────────────────────────────────── */}
       {autoSim && (
-        <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 flex items-center gap-3">
+        <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/50 rounded-xl p-3 flex items-center gap-3">
           <span className="w-2.5 h-2.5 rounded-full bg-teal-500 animate-ping shrink-0" />
-          <p className="text-sm text-teal-700">
+          <p className="text-sm text-teal-700 dark:text-teal-400">
             <span className="font-semibold">Live Simulation Active</span> — Generating new patient readings every 30 seconds.
             Dashboard refreshes automatically.
           </p>
@@ -249,13 +248,13 @@ function DashboardContent() {
 
       {/* ── High-risk Alert Banner ────────────────────────────────── */}
       {(stats?.highRiskCount || 0) > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-            <Zap className="w-5 h-5 text-red-600 animate-pulse" />
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+            <Zap className="w-5 h-5 text-red-600 dark:text-red-400 animate-pulse" />
           </div>
           <div>
-            <p className="font-semibold text-red-700">Autonomous Agent Actions Active</p>
-            <p className="text-sm text-red-600 mt-0.5">
+            <p className="font-semibold text-red-700 dark:text-red-400">Autonomous Agent Actions Active</p>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-0.5">
               {stats?.highRiskCount} high-risk patient{(stats?.highRiskCount || 0) > 1 ? 's' : ''} detected.
               CareSphere AI has autonomously alerted caregivers, generated medical summaries, and identified nearby hospitals.
             </p>
@@ -280,12 +279,12 @@ function DashboardContent() {
         {/* Section Header + Filters */}
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center">
               <Users className="w-4 h-4 text-brand-500" />
             </div>
             <div>
-              <h2 className="font-semibold text-slate-900">{t.patientMonitoring}</h2>
-              <p className="text-slate-400 text-xs">
+              <h2 className="font-semibold text-slate-900 dark:text-slate-100">{t.patientMonitoring}</h2>
+              <p className="text-slate-400 dark:text-slate-500 text-xs">
                 Showing {filteredPatients.length} of {stats?.monitoredPatients || 0} monitored
                 {stats && stats.totalPatients > stats.monitoredPatients
                   ? ` · ${stats.totalPatients.toLocaleString()} total in system`
@@ -304,12 +303,12 @@ function DashboardContent() {
                 placeholder="Filter by name…"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
-                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 w-40"
+                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 w-40"
               />
             </div>
 
             {/* Risk filter pills */}
-            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
               {(['all', 'high', 'medium', 'low'] as const).map((f) => (
                 <button
                   key={f}
@@ -320,7 +319,7 @@ function DashboardContent() {
                       : f === 'high'   ? 'bg-red-500 text-white'
                       : f === 'medium' ? 'bg-amber-500 text-white'
                       : 'bg-green-500 text-white'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                   }`}
                 >
                   {f}
@@ -351,11 +350,11 @@ function DashboardContent() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-              <Users className="w-7 h-7 text-slate-300" />
+          <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
+              <Users className="w-7 h-7 text-slate-300 dark:text-slate-500" />
             </div>
-            <p className="text-slate-500 font-medium">No patients match your filters</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">No patients match your filters</p>
             <button onClick={() => { setRiskFilter('all'); setNameFilter(''); }}
               className="mt-3 text-brand-500 text-sm hover:underline">
               Clear filters
@@ -370,18 +369,18 @@ function DashboardContent() {
           <button
             onClick={() => { const np = Math.max(1, page - 1); setPage(np); fetchData(np); }}
             disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 bg-white"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 bg-white dark:bg-slate-800"
           >
             ← Prev
           </button>
-          <span className="text-sm text-slate-500 px-2">
+          <span className="text-sm text-slate-500 dark:text-slate-400 px-2">
             Page {stats.currentPage} of {stats.totalPages}
-            <span className="text-slate-400 ml-2">({stats.monitoredPatients} monitored patients)</span>
+            <span className="text-slate-400 dark:text-slate-500 ml-2">({stats.monitoredPatients} monitored patients)</span>
           </span>
           <button
             onClick={() => { const np = Math.min(stats.totalPages, page + 1); setPage(np); fetchData(np); }}
             disabled={page >= stats.totalPages}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 bg-white"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 bg-white dark:bg-slate-800"
           >
             Next →
           </button>
@@ -389,8 +388,8 @@ function DashboardContent() {
       )}
 
       {/* ── Tech Stack Footer ─────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400 dark:text-slate-500">
           {[
             { dot: 'bg-teal-500',   label: 'Gemini 2.5 Flash' },
             { dot: 'bg-brand-500',  label: 'Firebase Genkit' },
@@ -404,8 +403,8 @@ function DashboardContent() {
               {label}
             </span>
           ))}
-          <span className="text-slate-300">|</span>
-          <span className="text-slate-400 font-medium">
+          <span className="text-slate-300 dark:text-slate-600">|</span>
+          <span className="text-slate-400 dark:text-slate-500 font-medium">
             Project 2030: MyAI Future Hackathon · Track 3: Vital Signs
           </span>
         </div>
@@ -430,21 +429,21 @@ function StatCard({ icon: Icon, label, value, color, pulse, sub }: {
   icon: React.ElementType; label: string; value: number; color: string; pulse?: boolean; sub?: string;
 }) {
   const cfg: Record<string, { bg: string; icon: string; border: string }> = {
-    blue:  { bg: 'bg-brand-50',  icon: 'text-brand-500',  border: 'border-brand-100' },
-    red:   { bg: 'bg-red-50',    icon: 'text-red-500',    border: 'border-red-100' },
-    amber: { bg: 'bg-amber-50',  icon: 'text-amber-500',  border: 'border-amber-100' },
-    teal:  { bg: 'bg-teal-50',   icon: 'text-teal-500',   border: 'border-teal-100' },
+    blue:  { bg: 'bg-brand-50 dark:bg-brand-900/20',  icon: 'text-brand-500',  border: 'border-brand-100 dark:border-brand-900/40' },
+    red:   { bg: 'bg-red-50 dark:bg-red-900/20',      icon: 'text-red-500',    border: 'border-red-100 dark:border-red-900/40' },
+    amber: { bg: 'bg-amber-50 dark:bg-amber-900/20',  icon: 'text-amber-500',  border: 'border-amber-100 dark:border-amber-900/40' },
+    teal:  { bg: 'bg-teal-50 dark:bg-teal-900/20',    icon: 'text-teal-500',   border: 'border-teal-100 dark:border-teal-900/40' },
   };
   const c = cfg[color] || cfg.blue;
 
   return (
-    <div className={`bg-white rounded-xl border ${c.border} shadow-card p-5 ${pulse ? 'ring-1 ring-red-200' : ''}`}>
+    <div className={`bg-white dark:bg-slate-800 rounded-xl border ${c.border} shadow-card p-5 ${pulse ? 'ring-1 ring-red-200 dark:ring-red-800/50' : ''}`}>
       <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
         <Icon className={`w-5 h-5 ${c.icon} ${pulse ? 'animate-pulse' : ''}`} />
       </div>
-      <p className="text-3xl font-bold text-slate-900">{value.toLocaleString()}</p>
-      <p className="text-slate-500 text-sm mt-0.5">{label}</p>
-      {sub && <p className="text-slate-400 text-xs mt-0.5">{sub}</p>}
+      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{value.toLocaleString()}</p>
+      <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{label}</p>
+      {sub && <p className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">{sub}</p>}
     </div>
   );
 }
