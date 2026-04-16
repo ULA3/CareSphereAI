@@ -4,6 +4,7 @@ import { runRiskAssessment } from '../flows/riskAssessmentFlow';
 import { runEmergencyActions } from '../flows/emergencyActionFlow';
 import { generateWeeklyReport } from '../flows/weeklyReportFlow';
 import { findNearbyHospitals } from '../tools/hospitalFinderTool';
+import { sendCaregiverAlert } from '../tools/caregiverAlertTool';
 import { HealthReading } from '../types/health.types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -302,31 +303,95 @@ router.post('/simulate/:id', async (req: Request, res: Response) => {
 });
 
 // ─── AUTO-SIMULATE ───────────────────────────────────────────────────────────
+//
+// Picks a small random batch of patients every tick (NOT all 1000) and runs
+// risk assessment + emergency actions on medium/high. This keeps Gemini usage
+// sustainable and lets caregiver alerts (Twilio/SendGrid) fire organically
+// during the live demo.
+//
+// Tuning knobs (conservative defaults — must leave quota headroom for user chat):
+//   AUTO_SIM_BATCH_SIZE    — patients processed per tick (default 3)
+//   AUTO_SIM_INTERVAL_MS   — tick interval (default 30s)
+//
+// Gemini 2.5 Flash free tier is ~10 RPM. 3 patients / 30s = 6 RPM for auto-sim,
+// leaving ~4 RPM for user-facing companion chat + manual risk assessments.
+// If auto-sim is too aggressive, Gemini returns 429 and the chat falls back
+// to template responses — which is exactly the bug we're preventing here.
 
 let autoSimInterval: ReturnType<typeof setInterval> | null = null;
 let autoSimEnabled = false;
+let autoSimBusy = false; // prevents overlapping ticks
+
+const AUTO_SIM_BATCH_SIZE = Number(process.env.AUTO_SIM_BATCH_SIZE || 3);
+const AUTO_SIM_INTERVAL_MS = Number(process.env.AUTO_SIM_INTERVAL_MS || 30_000);
+
+function pickRandomPatients(pool: ReturnType<typeof healthMemory.getAllPatients>, n: number) {
+  if (pool.length <= n) return pool;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n);
+}
 
 router.post('/auto-simulate/start', (_req: Request, res: Response) => {
   if (autoSimEnabled) return res.json({ success: true, data: { status: 'already running' } });
 
   autoSimEnabled = true;
-  autoSimInterval = setInterval(async () => {
-    const patients = healthMemory.getAllPatients();
-    for (const patient of patients) {
-      const roll = Math.random();
-      const scenario = roll < 0.7 ? 'normal' : roll < 0.9 ? 'warning' : 'critical';
-      const scenarios = {
-        normal: { heartRate: 68 + Math.random() * 20, sleepHours: 6 + Math.random() * 2, movementScore: 50 + Math.random() * 30, bloodPressure: { systolic: 120 + Math.random() * 20, diastolic: 78 + Math.random() * 10 }, oxygenSaturation: 96 + Math.random() * 3, temperature: 36.4 + Math.random() * 0.8 },
-        warning: { heartRate: 100 + Math.random() * 15, sleepHours: 3 + Math.random() * 2, movementScore: 15 + Math.random() * 20, bloodPressure: { systolic: 150 + Math.random() * 20, diastolic: 92 + Math.random() * 10 }, oxygenSaturation: 92 + Math.random() * 3, temperature: 37.2 + Math.random() * 0.8 },
-        critical: { heartRate: 125 + Math.random() * 20, sleepHours: 1 + Math.random() * 2, movementScore: 5 + Math.random() * 10, bloodPressure: { systolic: 170 + Math.random() * 20, diastolic: 105 + Math.random() * 10 }, oxygenSaturation: 86 + Math.random() * 4, temperature: 38 + Math.random() * 0.8 },
-      };
-      try {
-        await runRiskAssessment(patient.id, scenarios[scenario] as any);
-      } catch (_err) { /* ignore */ }
-    }
-  }, 30000);
+  console.log(`[auto-sim] ▶ starting — batch=${AUTO_SIM_BATCH_SIZE} interval=${AUTO_SIM_INTERVAL_MS}ms`);
 
-  res.json({ success: true, data: { status: 'started', interval: '30s' } });
+  const tick = async () => {
+    if (autoSimBusy) {
+      console.log('[auto-sim] ⏭ skipping tick (previous still running)');
+      return;
+    }
+    autoSimBusy = true;
+    try {
+      const pool = healthMemory.getAllPatients();
+      const batch = pickRandomPatients(pool, AUTO_SIM_BATCH_SIZE);
+
+      for (const patient of batch) {
+        const roll = Math.random();
+        const scenario = roll < 0.7 ? 'normal' : roll < 0.9 ? 'warning' : 'critical';
+        const scenarios = {
+          normal:   { heartRate: 68 + Math.random() * 20,  sleepHours: 6 + Math.random() * 2,   movementScore: 50 + Math.random() * 30, bloodPressure: { systolic: 120 + Math.random() * 20, diastolic: 78 + Math.random() * 10 },  oxygenSaturation: 96 + Math.random() * 3, temperature: 36.4 + Math.random() * 0.8 },
+          warning:  { heartRate: 100 + Math.random() * 15, sleepHours: 3 + Math.random() * 2,   movementScore: 15 + Math.random() * 20, bloodPressure: { systolic: 150 + Math.random() * 20, diastolic: 92 + Math.random() * 10 },  oxygenSaturation: 92 + Math.random() * 3, temperature: 37.2 + Math.random() * 0.8 },
+          critical: { heartRate: 125 + Math.random() * 20, sleepHours: 1 + Math.random() * 2,   movementScore: 5  + Math.random() * 10, bloodPressure: { systolic: 170 + Math.random() * 20, diastolic: 105 + Math.random() * 10 }, oxygenSaturation: 86 + Math.random() * 4, temperature: 38   + Math.random() * 0.8 },
+        };
+
+        try {
+          const assessment = await runRiskAssessment(patient.id, scenarios[scenario] as any);
+
+          // Fire the autonomous agent on medium/high — this is what causes the
+          // Twilio SMS / SendGrid email to actually dispatch during auto-sim.
+          if (assessment.riskLevel === 'medium' || assessment.riskLevel === 'high') {
+            await runEmergencyActions(
+              patient.id,
+              assessment.riskLevel,
+              assessment.riskScore,
+              assessment.reasons,
+              assessment.recommendations,
+            );
+          }
+        } catch (err) {
+          console.warn(`[auto-sim] patient ${patient.id} failed:`, String(err).substring(0, 80));
+        }
+      }
+    } finally {
+      autoSimBusy = false;
+    }
+  };
+
+  // Fire one immediately so the dashboard updates without waiting for the first tick
+  tick().catch(() => { /* already logged inside */ });
+  autoSimInterval = setInterval(tick, AUTO_SIM_INTERVAL_MS);
+
+  res.json({
+    success: true,
+    data: {
+      status: 'started',
+      batchSize: AUTO_SIM_BATCH_SIZE,
+      intervalMs: AUTO_SIM_INTERVAL_MS,
+      note: `Processes ${AUTO_SIM_BATCH_SIZE} random patients every ${AUTO_SIM_INTERVAL_MS / 1000}s. Emergency agent fires on medium/high.`,
+    },
+  });
 });
 
 router.post('/auto-simulate/stop', (_req: Request, res: Response) => {
@@ -344,37 +409,213 @@ router.get('/auto-simulate/status', (_req: Request, res: Response) => {
 
 // ─── DASHBOARD STATS ─────────────────────────────────────────────────────────
 
-router.get('/dashboard/stats', (_req: Request, res: Response) => {
-  const patients = healthMemory.getAllPatients();
+router.get('/dashboard/stats', (req: Request, res: Response) => {
+  const allPatients = healthMemory.getAllPatients();
   const allAssessments = healthMemory.getAllAssessments();
   const recent = allAssessments.slice(0, 50);
 
+  // Dashboard shows only patients with at least 1 risk assessment (actively monitored).
+  // The full 1000-patient list is available via GET /patients and the navbar search.
+  const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 200);
+  const page  = Math.max(parseInt((req.query.page  as string) || '1',  10), 1);
+
+  // Build monitored list: patients that have at least one assessment, sorted most-recent first
+  type PatientRow = {
+    patient: ReturnType<typeof healthMemory.getPatient>;
+    latestReading: ReturnType<typeof healthMemory.getLatestReadings>[0] | null;
+    latestAssessment: ReturnType<typeof healthMemory.getLatestAssessments>[0] | null;
+    adherenceRate: number;
+    lastActivity: number;
+  };
+
+  const monitored: PatientRow[] = [];
+  for (const p of allPatients) {
+    const assessments = healthMemory.getLatestAssessments(p.id, 1);
+    if (assessments.length === 0) continue; // skip patients with no assessments yet
+    const readings  = healthMemory.getLatestReadings(p.id, 1);
+    const adherence = healthMemory.getMedicationAdherence(p.id);
+    monitored.push({
+      patient:          p,
+      latestReading:    readings[0]    || null,
+      latestAssessment: assessments[0] || null,
+      adherenceRate:    adherence.rate,
+      lastActivity:     new Date(assessments[0].timestamp).getTime(),
+    });
+  }
+
+  // Sort most-recently assessed first
+  monitored.sort((a, b) => b.lastActivity - a.lastActivity);
+
+  const totalMonitored = monitored.length;
+  const start = (page - 1) * limit;
+  const pageSlice = monitored.slice(start, start + limit).map(({ lastActivity: _la, ...rest }) => rest);
+
   const stats = {
-    totalPatients: patients.length,
-    highRiskCount: recent.filter((a) => a.riskLevel === 'high').length,
-    mediumRiskCount: recent.filter((a) => a.riskLevel === 'medium').length,
-    lowRiskCount: recent.filter((a) => a.riskLevel === 'low').length,
+    totalPatients:    allPatients.length,       // all 1000
+    monitoredPatients: totalMonitored,           // patients with ≥1 assessment
+    totalPages:       Math.ceil(totalMonitored / limit),
+    currentPage:      page,
+    highRiskCount:    recent.filter((a) => a.riskLevel === 'high').length,
+    mediumRiskCount:  recent.filter((a) => a.riskLevel === 'medium').length,
+    lowRiskCount:     recent.filter((a) => a.riskLevel === 'low').length,
     totalAssessments: allAssessments.length,
     alertsToday: recent.filter((a) => {
       const d = new Date(a.timestamp);
-      const today = new Date();
-      return d.toDateString() === today.toDateString();
+      return d.toDateString() === new Date().toDateString();
     }).length,
     autoSimEnabled,
-    patientsWithReadings: patients.map((p) => {
-      const readings = healthMemory.getLatestReadings(p.id, 1);
-      const assessments = healthMemory.getLatestAssessments(p.id, 1);
-      const adherence = healthMemory.getMedicationAdherence(p.id);
-      return {
-        patient: p,
-        latestReading: readings[0] || null,
-        latestAssessment: assessments[0] || null,
-        adherenceRate: adherence.rate,
-      };
-    }),
+    patientsWithReadings: pageSlice,
   };
 
   res.json({ success: true, data: stats });
+});
+
+// ─── SSE LIVE STREAM ─────────────────────────────────────────────────────────
+// Clients connect with EventSource. Sends stats every 15s + heartbeat every 30s.
+router.get('/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  const sendStats = () => {
+    try {
+      const allAssessments = healthMemory.getAllAssessments ? healthMemory.getAllAssessments() : [];
+      const highRiskCount   = allAssessments.filter((a: any) => a.riskLevel === 'high').length;
+      const mediumRiskCount = allAssessments.filter((a: any) => a.riskLevel === 'medium').length;
+      const lowRiskCount    = allAssessments.filter((a: any) => a.riskLevel === 'low').length;
+      const today = new Date().toISOString().split('T')[0];
+      const alertsToday     = allAssessments.filter((a: any) => a.timestamp?.startsWith(today)).length;
+
+      const payload = {
+        type: 'stats',
+        highRiskCount,
+        mediumRiskCount,
+        lowRiskCount,
+        totalAssessments: allAssessments.length,
+        alertsToday,
+        timestamp: new Date().toISOString(),
+      };
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    }
+  };
+
+  // Send immediately on connect
+  sendStats();
+
+  // Then every 15 seconds
+  const statsInterval = setInterval(sendStats, 15000);
+
+  // Heartbeat every 30s to prevent proxy timeouts
+  const heartbeatInterval = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(statsInterval);
+    clearInterval(heartbeatInterval);
+    console.log('[SSE] Client disconnected');
+  });
+});
+
+// ─── DEMO ALERT (hackathon demo button) ──────────────────────────────────────
+router.post('/demo-alert', async (req: Request, res: Response) => {
+  try {
+    const patients = healthMemory.getAllPatients();
+    // Prefer a patient named Ahmad, fallback to first patient
+    const target = patients.find((p) => p.name.toLowerCase().includes('ahmad')) || patients[0];
+    if (!target) return res.status(404).json({ success: false, error: 'No patients in system' });
+
+    const criticalVitals = {
+      heartRate: 138,
+      sleepHours: 1.5,
+      movementScore: 4,
+      bloodPressure: { systolic: 182, diastolic: 112 },
+      oxygenSaturation: 87,
+      temperature: 38.6,
+    };
+
+    const assessment = await runRiskAssessment(target.id, criticalVitals as any);
+
+    if (assessment.riskLevel === 'medium' || assessment.riskLevel === 'high') {
+      await runEmergencyActions(
+        target.id,
+        assessment.riskLevel,
+        assessment.riskScore,
+        assessment.reasons,
+        assessment.recommendations,
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        patient: { name: target.name, id: target.id },
+        assessment,
+        message: `Demo alert triggered for ${target.name} — caregiver notified via SMS + Email`,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
+// ─── ALERTS (Demo/Test) ─────────────────────────────────────────────────────
+/**
+ * Fire a test caregiver alert for any patient — proves Twilio/SendGrid is live.
+ * POST /api/health/alerts/test
+ * body: { patientId?: string, riskLevel?: 'medium'|'high' }
+ *
+ * If patientId is omitted, uses patient-001 (Ahmad). Useful for demo day to
+ * trigger a real SMS + email without running the full simulation pipeline.
+ */
+router.post('/alerts/test', async (req: Request, res: Response) => {
+  try {
+    const patientId = req.body?.patientId || 'patient-001';
+    const riskLevel = (req.body?.riskLevel === 'medium' ? 'medium' : 'high') as 'medium' | 'high';
+
+    const patient = healthMemory.getPatient(patientId);
+    if (!patient) {
+      return res.status(404).json({ success: false, error: `Patient ${patientId} not found` });
+    }
+
+    const reasons =
+      riskLevel === 'high'
+        ? ['SpO₂ 88% (critical hypoxaemia)', 'HR 128bpm (severe tachycardia)', 'BP 186/112mmHg (hypertensive crisis)']
+        : ['Blood pressure elevated (158/96)', 'Sleep 4.2h (below baseline)', 'Movement score declining'];
+
+    const urgencyMessage =
+      riskLevel === 'high'
+        ? `🚨 URGENT: CareSphere AI has detected CRITICAL health risk for ${patient.name}. Immediate medical attention required. This is a TEST alert triggered manually for system verification.`
+        : `⚠️ ATTENTION: CareSphere AI has detected elevated health risk for ${patient.name}. Please check in within 30 minutes. This is a TEST alert triggered manually.`;
+
+    const result = await sendCaregiverAlert({
+      patientId,
+      riskLevel,
+      riskReasons: reasons,
+      urgencyMessage,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        testAlert: true,
+        patient: { id: patient.id, name: patient.name, caregiver: patient.caregiver },
+        dispatchResult: result,
+        hint:
+          result.smsStatus === 'skipped' && result.emailStatus === 'skipped'
+            ? 'Running in SIMULATION mode — set TWILIO_* and SENDGRID_* env vars in Cloud Run to enable real dispatch.'
+            : undefined,
+      },
+    });
+  } catch (err) {
+    console.error('[alerts/test] Error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
 });
 
 export default router;

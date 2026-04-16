@@ -1,5 +1,6 @@
-# Multi-stage build for CareSphere AI backend
-# Target: Google Cloud Run (Node 20, Alpine)
+# Root-level Dockerfile for Cloud Build trigger (Dockerfile mode).
+# Build context = repo root (/workspace), so all paths use backend/ prefix.
+# The Cloud Build trigger looks for /workspace/Dockerfile — this file.
 
 # --- Build stage ---
 FROM node:20-alpine AS builder
@@ -7,12 +8,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install all deps (including dev) so tsc can compile
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 
 # Copy source and compile to dist/
-COPY tsconfig.json ./
-COPY src ./src
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
 RUN npm run build
 
 # --- Runtime stage ---
@@ -23,13 +24,11 @@ ENV NODE_ENV=production
 ENV PORT=8080
 
 # Install only production deps
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled JS from the builder stage
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 8080
-USER node
-
 CMD ["node", "dist/index.js"]
