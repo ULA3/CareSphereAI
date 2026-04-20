@@ -206,8 +206,8 @@ export default function PatientProfilePage() {
         const actions: AgentAction[] = [
           { id: '1', icon: Brain,    label: 'Gemini 2.5 Flash — Risk Assessment',   detail: `Score ${res.assessment.riskScore}/100 — HIGH risk detected`, color: 'text-brand-500', delay: 0 },
           { id: '2', icon: FileText, label: 'Medical Summary Generated',             detail: `${res.assessment.reasons.slice(0,2).join('; ')}`,             color: 'text-purple-500', delay: 1 },
-          { id: '3', icon: BellRing, label: `Caregiver Alerted — ${patient.caregiver.name}`, detail: `${patient.caregiver.relationship} · ${patient.caregiver.phone}`, color: 'text-amber-500', delay: 2 },
-          { id: '4', icon: Hospital, label: 'Nearest Hospital Identified',           detail: `Hospital Kerajaan — ${patient.location.city}`,               color: 'text-teal-500', delay: 3 },
+          { id: '3', icon: BellRing, label: `Caregiver Alerted — ${patient?.caregiver.name ?? 'Caregiver'}`, detail: `${patient?.caregiver.relationship ?? ''} · ${patient?.caregiver.phone ?? ''}`, color: 'text-amber-500', delay: 2 },
+          { id: '4', icon: Hospital, label: 'Nearest Hospital Identified',           detail: `Hospital Kerajaan — ${patient?.location.city ?? 'Nearby'}`,   color: 'text-teal-500', delay: 3 },
           { id: '5', icon: Siren,    label: 'Emergency Protocol Activated',          detail: 'Monitoring frequency increased to every 60 seconds',          color: 'text-red-500', delay: 4 },
         ];
         setAgentActions(actions);
