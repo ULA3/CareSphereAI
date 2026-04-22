@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  Send, Brain, ChevronRight, User, Stethoscope,
-  FileText, TrendingUp, Pill, AlertTriangle, Loader2, Sparkles, Search, X
+  Send, Brain, User, Stethoscope,
+  FileText, TrendingUp, Pill, AlertTriangle, Loader2, Sparkles, Search, X, ChevronRight
 } from 'lucide-react';
 import { api, Patient, CompanionResponse } from '@/lib/api';
 
@@ -17,12 +17,12 @@ interface Message {
 }
 
 const SUGGESTED_QUERIES = [
-  { icon: TrendingUp,  label: 'Vital trend summary',       query: 'Give me a summary of this patient\'s vital signs trend over the past week.' },
-  { icon: Pill,        label: 'Medication review',          query: 'Review this patient\'s current medications and flag any concerns.' },
-  { icon: AlertTriangle, label: 'Risk factors',             query: 'What are the top risk factors I should be monitoring for this patient?' },
-  { icon: FileText,    label: 'Clinical summary',           query: 'Generate a concise clinical summary of this patient\'s current health status.' },
-  { icon: Stethoscope, label: 'Condition assessment',       query: 'Based on the latest readings, how well-controlled are this patient\'s chronic conditions?' },
-  { icon: TrendingUp,  label: 'Deterioration signs',        query: 'Are there any early signs of health deterioration I should be concerned about?' },
+  { icon: TrendingUp,    label: 'Vital trend summary',      query: "Give me a summary of this patient's vital signs trend over the past week." },
+  { icon: Pill,          label: 'Medication review',         query: "Review this patient's current medications and flag any concerns." },
+  { icon: AlertTriangle, label: 'Risk factors',              query: 'What are the top risk factors I should be monitoring for this patient?' },
+  { icon: FileText,      label: 'Clinical summary',          query: "Generate a concise clinical summary of this patient's current health status." },
+  { icon: Stethoscope,   label: 'Condition assessment',      query: "Based on the latest readings, how well-controlled are this patient's chronic conditions?" },
+  { icon: TrendingUp,    label: 'Deterioration signs',       query: 'Are there any early signs of health deterioration I should be concerned about?' },
 ];
 
 export default function ClinicalAssistantPage() {
@@ -35,12 +35,12 @@ export default function ClinicalAssistantPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.getPatients().then((ps) => setPatients(ps));
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -64,6 +64,7 @@ export default function ClinicalAssistantPage() {
     setMessages([]);
     setSearchQuery('');
     setSearchOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   useEffect(() => {
@@ -125,51 +126,59 @@ export default function ClinicalAssistantPage() {
   const currentPatient = patients.find((p) => p.id === selectedPatient);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-4 animate-fade-in">
+    <div className="flex h-[calc(100vh-4rem)] -mx-6 -mt-6 animate-fade-in">
 
-      {/* ── Left Panel ──────────────────────────────────────────────── */}
-      <div className="w-72 flex flex-col gap-4 shrink-0">
+      {/* ── Left Sidebar ─────────────────────────────────────────────── */}
+      <aside className="w-64 shrink-0 flex flex-col border-r border-slate-200/80 dark:border-slate-700/60 bg-white/60 dark:bg-slate-900/40 backdrop-blur-sm">
 
-        {/* Patient selector */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card p-4">
-          <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
-            <Brain className="w-4 h-4 text-brand-500" />
-            AI Clinical Assistant
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            Ask clinical questions about any patient — powered by Gemini 2.5 Flash + RAG memory.
+        {/* Branding */}
+        <div className="px-5 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 mb-0.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <Brain className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 tracking-tight">AI Clinical Assistant</span>
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
+            Gemini 2.5 Flash · RAG Memory
           </p>
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 block">Search Patient</label>
+        </div>
+
+        {/* Patient Search */}
+        <div className="px-4 pt-4 pb-2">
+          <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2.5 px-1">Patient</p>
           <div ref={searchRef} className="relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <div className="relative flex items-center">
+              <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
                 onFocus={() => setSearchOpen(true)}
-                placeholder="Search by name, city, condition…"
-                className="w-full border border-slate-200 dark:border-slate-600 rounded-lg pl-8 pr-8 py-2 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 placeholder-slate-400"
+                placeholder="Search patients…"
+                className="w-full bg-slate-100/80 dark:bg-slate-800/60 border border-transparent focus:border-violet-300 dark:focus:border-violet-600 rounded-lg pl-8 pr-7 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all"
               />
               {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); setSearchOpen(true); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="w-3.5 h-3.5" />
+                <button onClick={() => { setSearchQuery(''); setSearchOpen(true); }} className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
             {searchOpen && (
-              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+              <div className="absolute z-50 w-full mt-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200/80 dark:border-slate-700 overflow-hidden max-h-56 overflow-y-auto">
                 {filteredPatients.length === 0 ? (
-                  <p className="px-3 py-3 text-xs text-slate-400">No patients found</p>
+                  <p className="px-3 py-3 text-xs text-slate-400 text-center">No patients found</p>
                 ) : (
                   filteredPatients.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => selectPatient(p.id)}
-                      className={`w-full text-left px-3 py-2.5 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0 ${selectedPatient === p.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors border-b border-slate-100/60 dark:border-slate-700/60 last:border-0 ${
+                        selectedPatient === p.id ? 'bg-violet-50 dark:bg-violet-900/20' : ''
+                      }`}
                     >
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{p.name}</p>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">{p.age}y · {p.location.city} · {p.conditions[0]}</p>
+                      <p className="text-xs font-medium text-slate-800 dark:text-slate-200">{p.name}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{p.age}y · {p.location.city}</p>
                     </button>
                   ))
                 )}
@@ -177,199 +186,229 @@ export default function ClinicalAssistantPage() {
             )}
           </div>
 
+          {/* Selected patient card */}
           {currentPatient && (
-            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600 space-y-1">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+            <div className="mt-3 rounded-xl bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 border border-violet-100 dark:border-violet-800/40 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
+                  <User className="w-3 h-3 text-white" />
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{currentPatient.name}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{currentPatient.age}y · {currentPatient.gender} · {currentPatient.location.city}</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{currentPatient.name}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">{currentPatient.age}y · {currentPatient.gender}</p>
                 </div>
               </div>
-              <div className="pt-1 space-y-0.5">
-                {currentPatient.conditions.map((c) => (
-                  <span key={c} className="inline-block text-[10px] bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-800 rounded-full px-2 py-0.5 mr-1 mb-0.5">{c}</span>
+              <div className="flex flex-wrap gap-1">
+                {currentPatient.conditions.slice(0, 2).map((c) => (
+                  <span key={c} className="text-[9px] font-medium bg-white/70 dark:bg-slate-800/50 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-700/50 rounded-full px-2 py-0.5">{c}</span>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-                {currentPatient.medications.length} medications on record
-              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{currentPatient.medications.length} medications</p>
             </div>
           )}
         </div>
 
-        {/* Suggested queries */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card p-4 flex-1 overflow-y-auto">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Quick Clinical Queries</p>
-          <div className="space-y-1">
+        {/* Quick queries */}
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
+          <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2.5 px-1">Quick Queries</p>
+          <div className="space-y-0.5">
             {SUGGESTED_QUERIES.map(({ icon: Icon, label, query }) => (
               <button
                 key={label}
                 onClick={() => sendMessage(query)}
                 disabled={loading || !selectedPatient}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left transition-colors hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:text-brand-700 dark:hover:text-brand-400 text-slate-600 dark:text-slate-300 disabled:opacity-40 group border border-transparent hover:border-brand-200 dark:hover:border-brand-800"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-left transition-all hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 disabled:opacity-35 group"
               >
-                <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-brand-500" />
+                <Icon className="w-3.5 h-3.5 shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-violet-500 transition-colors" />
                 <span className="flex-1 truncate">{label}</span>
-                <ChevronRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 text-brand-400" />
+                <ChevronRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 text-slate-400 transition-opacity" />
               </button>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* ── Chat Area ───────────────────────────────────────────────── */}
-      <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card flex flex-col overflow-hidden">
-
-        {/* Header */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-md">
-            <Brain className="w-5 h-5 text-white" />
+        {/* AI status footer */}
+        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-slate-400 dark:text-slate-500">Gemini 2.5 Flash active</span>
           </div>
-          <div>
-            <p className="font-semibold text-slate-900 dark:text-slate-100">AI Clinical Assistant</p>
-            <p className="text-xs text-brand-600 dark:text-brand-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-blink" />
-              Gemini 2.5 Flash · RAG Health Memory · Real Patient Data
-            </p>
-          </div>
-          {currentPatient && (
-            <div className="ml-auto flex items-center gap-2 bg-slate-50 dark:bg-slate-700 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-600">
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              <div className="text-right">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{currentPatient.name}</p>
-                <p className="text-[10px] text-slate-400">{currentPatient.age}y · {currentPatient.conditions[0]}</p>
-              </div>
-            </div>
-          )}
         </div>
+      </aside>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/30">
+      {/* ── Main Chat Area ───────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
 
-          {/* Empty state — no patient selected */}
-          {!selectedPatient && (
-            <div className="h-full flex flex-col items-center justify-center text-center py-8">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-100 to-purple-100 dark:from-brand-900/30 dark:to-purple-900/30 flex items-center justify-center mb-4">
-                <Search className="w-8 h-8 text-brand-500" />
+        {/* Chat header — only shown when patient selected */}
+        {currentPatient && (
+          <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-100 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                <Brain className="w-4 h-4 text-white" />
               </div>
-              <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Search for a Patient</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-                Use the search box on the left to find a patient by name, city, or condition — then ask me anything about their health data.
-              </p>
-            </div>
-          )}
-
-          {/* Empty state — patient selected, no messages yet */}
-          {selectedPatient && messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center py-8">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-100 to-purple-100 dark:from-brand-900/30 dark:to-purple-900/30 flex items-center justify-center mb-4">
-                <Sparkles className="w-8 h-8 text-brand-500" />
-              </div>
-              <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Ready for {currentPatient?.name}</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mb-6">
-                Ask me anything about this patient — vitals, trends, medication concerns, risk factors, or a full clinical summary.
-              </p>
-              <div className="grid grid-cols-2 gap-2 w-full max-w-md">
-                {SUGGESTED_QUERIES.slice(0, 4).map(({ icon: Icon, label, query }) => (
-                  <button
-                    key={label}
-                    onClick={() => sendMessage(query)}
-                    disabled={loading}
-                    className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-700 dark:hover:text-brand-400 transition-colors text-left disabled:opacity-40"
-                  >
-                    <Icon className="w-4 h-4 text-brand-400 shrink-0" />
-                    <span className="text-xs">{label}</span>
-                  </button>
-                ))}
+              <div>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Consulting on <span className="text-violet-600 dark:text-violet-400">{currentPatient.name}</span></p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">{currentPatient.age}y · {currentPatient.conditions[0]} · {currentPatient.medications.length} medications</p>
               </div>
             </div>
-          )}
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live patient data
+            </div>
+          </div>
+        )}
 
-          {/* Message list */}
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}>
-              {msg.role === 'ai' && (
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Brain className="w-3.5 h-3.5 text-white" />
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto w-full px-4 py-6">
+
+            {/* ── Empty state: no patient ── */}
+            {!selectedPatient && (
+              <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-5 shadow-lg shadow-violet-200 dark:shadow-violet-900/40">
+                  <Brain className="w-7 h-7 text-white" />
                 </div>
-              )}
-              <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                msg.role === 'user'
-                  ? 'bg-brand-600 text-white rounded-br-sm'
-                  : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-sm'
-              }`}>
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-                {msg.flagged && (
-                  <div className="mt-2 flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs border-t border-amber-200 dark:border-amber-800 pt-2">
-                    <AlertTriangle className="w-3 h-3" />
-                    Caregiver alert triggered
-                  </div>
-                )}
-                <div className="flex items-center justify-between mt-1.5 gap-3">
-                  <p className={`text-[10px] ${msg.role === 'user' ? 'text-brand-200' : 'text-slate-400 dark:text-slate-500'}`}>
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  {msg.sentiment && msg.role === 'ai' && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      msg.sentiment === 'urgent'      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' :
-                      msg.sentiment === 'informative' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' :
-                      msg.sentiment === 'reassuring'  ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' :
-                      'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                    }`}>
-                      {msg.sentiment}
+                <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2 tracking-tight">AI Clinical Assistant</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed mb-8">
+                  Search for a patient on the left, then ask clinical questions — vitals, trends, medication review, risk assessment, and more.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                  {['Vital trend summary', 'Medication concerns', 'Risk factors', 'Clinical summary'].map((chip) => (
+                    <span key={chip} className="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 cursor-default">
+                      {chip}
                     </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Empty state: patient selected, no messages ── */}
+            {selectedPatient && messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center min-h-[55vh] text-center">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4 shadow-md shadow-violet-200 dark:shadow-violet-900/40">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-1.5 tracking-tight">
+                  Ready for {currentPatient?.name}
+                </h2>
+                <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm mb-7 leading-relaxed">
+                  Ask anything about this patient — vitals, trends, medications, or a full clinical summary.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center max-w-xl">
+                  {SUGGESTED_QUERIES.map(({ label, query }) => (
+                    <button
+                      key={label}
+                      onClick={() => sendMessage(query)}
+                      disabled={loading}
+                      className="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-700 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all disabled:opacity-40"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Message list ── */}
+            <div className="space-y-5">
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3`}>
+
+                  {/* AI avatar */}
+                  {msg.role === 'ai' && (
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                      <Brain className="w-3.5 h-3.5 text-white" />
+                    </div>
+                  )}
+
+                  {/* Bubble */}
+                  <div className={`max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+                    <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-gradient-to-br from-violet-500 to-indigo-600 text-white rounded-tr-sm shadow-sm shadow-violet-200 dark:shadow-violet-900/30'
+                        : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 rounded-tl-sm border border-slate-200/60 dark:border-slate-700/60'
+                    }`}>
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                      {msg.flagged && (
+                        <div className="mt-2.5 flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs border-t border-amber-200/60 dark:border-amber-700/40 pt-2">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          Caregiver alert triggered
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Meta row */}
+                    <div className={`flex items-center gap-2 mt-1 px-1 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <span className="text-[10px] text-slate-300 dark:text-slate-600">
+                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {msg.sentiment && msg.role === 'ai' && (
+                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${
+                          msg.sentiment === 'urgent'      ? 'bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400' :
+                          msg.sentiment === 'informative' ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400' :
+                          msg.sentiment === 'reassuring'  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' :
+                          'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        }`}>
+                          {msg.sentiment}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* User avatar */}
+                  {msg.role === 'user' && (
+                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                      <Stethoscope className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                    </div>
                   )}
                 </div>
-              </div>
-              {msg.role === 'user' && (
-                <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Stethoscope className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
+              ))}
+
+              {/* Typing indicator */}
+              {loading && (
+                <div className="flex justify-start gap-3">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
+                    <Brain className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2.5">
+                    <Loader2 className="w-3.5 h-3.5 text-violet-500 animate-spin" />
+                    <span className="text-xs text-slate-400 dark:text-slate-500">Analysing patient data…</span>
+                  </div>
                 </div>
               )}
             </div>
-          ))}
 
-          {/* Typing indicator */}
-          {loading && (
-            <div className="flex justify-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shrink-0">
-                <Brain className="w-3.5 h-3.5 text-white" />
-              </div>
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 text-brand-500 animate-spin" />
-                <span className="text-xs text-slate-500 dark:text-slate-400">Analysing patient data…</span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-2" />
+          </div>
         </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-              placeholder={currentPatient ? `Ask a clinical question about ${currentPatient.name}…` : 'Select a patient to begin…'}
-              disabled={!selectedPatient}
-              className="flex-1 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 bg-white dark:bg-slate-700 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
-            />
-            <button
-              onClick={() => sendMessage()}
-              disabled={loading || !input.trim() || !selectedPatient}
-              className="px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+        {/* ── Input bar ───────────────────────────────────────────────── */}
+        <div className="shrink-0 px-4 pb-5 pt-3 bg-white dark:bg-slate-900 border-t border-slate-100/80 dark:border-slate-800/60">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 shadow-sm focus-within:border-violet-300 dark:focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-500/15 transition-all">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                placeholder={currentPatient ? `Ask a clinical question about ${currentPatient.name}…` : 'Select a patient to begin…'}
+                disabled={!selectedPatient}
+                className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none disabled:opacity-50"
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={loading || !input.trim() || !selectedPatient}
+                className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-violet-500 to-indigo-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-md hover:shadow-violet-200 dark:hover:shadow-violet-900/40 transition-all shrink-0"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-300 dark:text-slate-600 text-center mt-2.5">
+              Responses are grounded in real patient vitals, history, and risk assessments via RAG memory
+            </p>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 text-center">
-            AI responses are grounded in real patient vitals, history, and risk assessments via RAG memory
-          </p>
         </div>
       </div>
     </div>
