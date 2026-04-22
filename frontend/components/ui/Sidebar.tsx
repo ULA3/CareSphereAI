@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, MessageCircle, Bell, TrendingUp, MapPin,
+  LayoutDashboard, Bell, TrendingUp, MapPin,
   Pill, Users, FileText, UserPlus, ChevronRight,
   Activity, Zap, Brain,
 } from 'lucide-react';
@@ -34,7 +34,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Patient Care',
     items: [
-      { href: '/companion',  icon: MessageCircle, key: 'aiCompanion' },
+      { href: '/companion',  icon: Brain,         label: 'AI Clinical Assistant' },
       { href: '/caregiver',  icon: Users,         key: 'caregiver' },
       { href: '/medications',icon: Pill,          key: 'medications' },
     ],
