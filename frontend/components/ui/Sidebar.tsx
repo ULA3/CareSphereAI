@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, MessageCircle, Bell, TrendingUp, MapPin,
-  Pill, Users, FileText, Cpu, UserPlus, ChevronRight,
+  Pill, Users, FileText, UserPlus, ChevronRight,
   Activity, Zap, Brain,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -44,7 +44,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/hospitals', icon: MapPin,   key: 'hospitals' },
       { href: '/report',    icon: FileText, key: 'weeklyReport' },
-      { href: '/devices',   icon: Cpu,      label: 'Device Monitor' },
       { href: '/onboard',   icon: UserPlus, label: 'Add Patient' },
     ],
   },

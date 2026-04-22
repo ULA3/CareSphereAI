@@ -10,7 +10,6 @@ import cors from 'cors';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import healthRoutes from './routes/healthRoutes';
 import companionRoutes from './routes/companionRoutes';
-import deviceRoutes from './routes/deviceRoutes';
 import { seedDemoData } from './rag/healthMemoryService';
 
 const app = express();
@@ -64,15 +63,12 @@ app.get('/', (_req, res) => {
       dashboard: 'GET /api/health/dashboard/stats',
       chat: 'POST /api/companion/chat',
       checkin: 'POST /api/companion/daily-checkin/:id',
-      devices: 'GET /api/devices',
-      deviceReading: 'POST /api/devices/:deviceId/reading',
     },
   });
 });
 
 app.use('/api/health', healthRoutes);
 app.use('/api/companion', companionRoutes);
-app.use('/api/devices', deviceRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

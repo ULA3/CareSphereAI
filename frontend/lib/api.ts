@@ -182,29 +182,6 @@ export interface WeeklyReport {
   nextReviewDate: string;
 }
 
-export interface DeviceStatus {
-  deviceId: string;
-  patientId: string;
-  deviceType: string;
-  model: string;
-  patient: Patient | undefined;
-  lastSeen: string | null;
-  readingCount: number;
-  status: 'online' | 'idle' | 'never_connected';
-}
-
-export interface DeviceReadingResult {
-  deviceId: string;
-  deviceType: string;
-  model: string;
-  patientName: string;
-  readingReceived: HealthReading;
-  assessment: RiskAssessment;
-  anomalies: string[];
-  agentActionsTriggered: boolean;
-  agentActions: unknown;
-  processedAt: string;
-}
 
 export const api = {
   // Patients
@@ -257,17 +234,6 @@ export const api = {
   // Weekly Report
   getWeeklyReport: (patientId: string) =>
     request<WeeklyReport>(`/api/health/patients/${patientId}/report/weekly`),
-
-  // Devices
-  getDevices: () => request<DeviceStatus[]>('/api/devices'),
-  sendDeviceReading: (deviceId: string, reading: Partial<{
-    heartRate: number; oxygenSaturation: number; temperature: number;
-    bloodPressure: { systolic: number; diastolic: number };
-    sleepHours: number; movementScore: number; glucoseLevel: number;
-  }>) =>
-    request<DeviceReadingResult>(`/api/devices/${deviceId}/reading`, {
-      method: 'POST', body: JSON.stringify(reading),
-    }),
 
   // Patients — create
   createPatient: (data: {
