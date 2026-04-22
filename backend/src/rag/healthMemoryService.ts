@@ -1,12 +1,14 @@
 /**
  * RAG-based Health Memory Service
- * Stores patient health history and provides contextual retrieval
- * Architecture: In-memory store (Firestore-compatible interface for Cloud deployment)
+ * Write-through cache: reads from in-memory Maps (fast), writes to both
+ * in-memory and Firestore (persistent). On startup, data is restored from
+ * Firestore so nothing is lost across restarts.
  */
 
 import { HealthReading, RiskAssessment, RiskLevel, ConversationMessage, Patient } from '../types/health.types';
 import { generateMalaysianPatients } from './seedGenerator';
 import { v4 as uuidv4 } from 'uuid';
+import { db } from '../lib/firebase';
 
 interface HealthDocument {
   id: string;
@@ -65,6 +67,8 @@ class HealthMemoryService {
     if (!this.documents.has(patient.id)) {
       this.documents.set(patient.id, []);
     }
+    db?.collection('patients').doc(patient.id).set(patient)
+      .catch((e) => console.error('[Firestore] storePatient:', e));
   }
 
   getPatient(patientId: string): Patient | undefined {
@@ -95,6 +99,10 @@ class HealthMemoryService {
 
     // Recompute baseline every 5 new readings
     if (readings.length % 5 === 0) this.computeBaseline(reading.patientId);
+
+    db?.collection('patients').doc(reading.patientId)
+      .collection('readings').doc(reading.id).set(reading)
+      .catch((e) => console.error('[Firestore] storeReading:', e));
   }
 
   storeAssessment(assessment: RiskAssessment): void {
@@ -102,6 +110,10 @@ class HealthMemoryService {
     assessments.unshift(assessment);
     if (assessments.length > 50) assessments.pop();
     this.assessments.set(assessment.patientId, assessments);
+
+    db?.collection('patients').doc(assessment.patientId)
+      .collection('assessments').doc(assessment.id).set(assessment)
+      .catch((e) => console.error('[Firestore] storeAssessment:', e));
   }
 
   getLatestReadings(patientId: string, limit = 10): HealthReading[] {
@@ -123,6 +135,10 @@ class HealthMemoryService {
     msgs.push(message);
     if (msgs.length > 50) msgs.shift();
     this.conversations.set(message.patientId, msgs);
+
+    db?.collection('patients').doc(message.patientId)
+      .collection('conversations').doc(message.id).set(message)
+      .catch((e) => console.error('[Firestore] storeConversationMessage:', e));
   }
 
   getConversationHistory(patientId: string, limit = 10): ConversationMessage[] {
@@ -142,6 +158,10 @@ class HealthMemoryService {
     if (existing >= 0) meds[existing] = med;
     else meds.push(med);
     this.medications.set(med.patientId, meds);
+
+    db?.collection('patients').doc(med.patientId)
+      .collection('medications').doc(med.id).set(med)
+      .catch((e) => console.error('[Firestore] storeMedication:', e));
   }
 
   getMedicationLogs(patientId: string, date?: string): MedicationLog[] {
@@ -156,6 +176,10 @@ class HealthMemoryService {
     if (existing >= 0) logs[existing] = log;
     else logs.push(log);
     this.medicationLogs.set(log.patientId, logs);
+
+    db?.collection('patients').doc(log.patientId)
+      .collection('medicationLogs').doc(log.id).set(log)
+      .catch((e) => console.error('[Firestore] storeMedicationLog:', e));
   }
 
   getMedicationAdherence(patientId: string): { total: number; taken: number; rate: number } {
@@ -187,6 +211,11 @@ class HealthMemoryService {
     };
 
     this.baselines.set(patientId, baseline);
+
+    db?.collection('patients').doc(patientId)
+      .collection('baseline').doc('current').set(baseline)
+      .catch((e) => console.error('[Firestore] computeBaseline:', e));
+
     return baseline;
   }
 
@@ -307,6 +336,47 @@ Avg O₂: ${baseline.avgOxygenSaturation.toFixed(1)}% | Avg Sleep: ${baseline.av
   private readingToText(r: HealthReading): string {
     return `[${r.timestamp}] Heart Rate: ${r.heartRate}bpm, Sleep: ${r.sleepHours}h, Movement: ${r.movementScore}/100, BP: ${r.bloodPressure.systolic}/${r.bloodPressure.diastolic}mmHg, O2: ${r.oxygenSaturation}%, Temp: ${r.temperature}°C`;
   }
+
+  /**
+   * Restore all data from Firestore into in-memory Maps on server startup.
+   * Called once before seedDemoData — if Firestore has data, skip seeding.
+   */
+  async loadFromFirestore(): Promise<boolean> {
+    if (!db) return false;
+    try {
+      const patientsSnap = await db.collection('patients').get();
+      if (patientsSnap.empty) return false;
+
+      for (const patientDoc of patientsSnap.docs) {
+        const patient = patientDoc.data() as Patient;
+        this.patients.set(patient.id, patient);
+        if (!this.documents.has(patient.id)) this.documents.set(patient.id, []);
+
+        const [readingsSnap, assessSnap, convsSnap, medsSnap, logsSnap, baselineSnap] =
+          await Promise.all([
+            db.collection(`patients/${patient.id}/readings`).orderBy('timestamp', 'desc').limit(100).get(),
+            db.collection(`patients/${patient.id}/assessments`).orderBy('timestamp', 'desc').limit(50).get(),
+            db.collection(`patients/${patient.id}/conversations`).orderBy('timestamp', 'asc').limit(50).get(),
+            db.collection(`patients/${patient.id}/medications`).get(),
+            db.collection(`patients/${patient.id}/medicationLogs`).get(),
+            db.collection(`patients/${patient.id}/baseline`).doc('current').get(),
+          ]);
+
+        this.readings.set(patient.id, readingsSnap.docs.map((d) => d.data() as HealthReading));
+        this.assessments.set(patient.id, assessSnap.docs.map((d) => d.data() as RiskAssessment));
+        this.conversations.set(patient.id, convsSnap.docs.map((d) => d.data() as ConversationMessage));
+        this.medications.set(patient.id, medsSnap.docs.map((d) => d.data() as MedicationSchedule));
+        this.medicationLogs.set(patient.id, logsSnap.docs.map((d) => d.data() as MedicationLog));
+        if (baselineSnap.exists) this.baselines.set(patient.id, baselineSnap.data() as PatientBaseline);
+      }
+
+      console.log(`[Firestore] Restored ${patientsSnap.size} patients from database ✓`);
+      return true;
+    } catch (err) {
+      console.error('[Firestore] loadFromFirestore failed:', err);
+      return false;
+    }
+  }
 }
 
 export const healthMemory = new HealthMemoryService();
@@ -372,7 +442,10 @@ function seedRiskAssessment(reading: HealthReading): RiskAssessment {
   };
 }
 
-export function seedDemoData(): void {
+export async function seedDemoData(): Promise<void> {
+  // If Firestore already has data, restore it and skip seeding
+  const restored = await healthMemory.loadFromFirestore();
+  if (restored) return;
   const patients: Patient[] = [
     {
       id: 'patient-001',

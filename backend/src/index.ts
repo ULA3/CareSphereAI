@@ -73,9 +73,10 @@ app.use('/api/companion', companionRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// Seed demo data on startup
-seedDemoData();
-console.log('[CareSphere AI] Demo patient data seeded');
+// Seed demo data on startup (async — loads from Firestore if available)
+seedDemoData()
+  .then(() => console.log('[CareSphere AI] Patient data ready (Firestore or seed)'))
+  .catch((err) => console.error('[CareSphere AI] Seed error:', err));
 
 app.listen(PORT, () => {
   console.log(`
