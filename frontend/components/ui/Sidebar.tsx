@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Bell, TrendingUp, MapPin,
   Pill, Users, FileText, UserPlus, ChevronRight,
-  Activity, Zap, Brain,
+  Activity, Zap, Brain, Shield, ClipboardList,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -45,6 +45,13 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/hospitals', icon: MapPin,   key: 'hospitals' },
       { href: '/report',    icon: FileText, key: 'weeklyReport' },
       { href: '/onboard',   icon: UserPlus, label: 'Add Patient' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { href: '/admin', icon: Shield,        label: 'Admin Centre' },
+      { href: '/audit', icon: ClipboardList, label: 'Audit Log' },
     ],
   },
 ];

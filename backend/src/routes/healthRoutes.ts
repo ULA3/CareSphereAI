@@ -618,4 +618,226 @@ router.post('/alerts/test', async (req: Request, res: Response) => {
   }
 });
 
+// ─── ADMIN: ANALYTICS ────────────────────────────────────────────────────────
+
+router.get('/admin/analytics', (_req: Request, res: Response) => {
+  const allPatients   = healthMemory.getAllPatients();
+  const allAssessments = healthMemory.getAllAssessments();
+
+  const today     = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const weekAgo   = new Date(Date.now() - 7 * 86400000).toISOString();
+
+  const todayAssessments     = allAssessments.filter((a) => a.timestamp.startsWith(today));
+  const yesterdayAssessments = allAssessments.filter((a) => a.timestamp.startsWith(yesterday));
+  const weekAssessments      = allAssessments.filter((a) => a.timestamp >= weekAgo);
+
+  // Adherence average across all patients that have medication data
+  let totalAdherence = 0, adherenceCount = 0;
+  for (const p of allPatients) {
+    const adh = healthMemory.getMedicationAdherence(p.id);
+    if (adh.total > 0) { totalAdherence += adh.rate; adherenceCount++; }
+  }
+  const avgAdherence = adherenceCount > 0 ? Math.round(totalAdherence / adherenceCount) : 0;
+
+  // AI clinical queries = total conversation messages across all patients
+  let totalAIQueries = 0;
+  for (const p of allPatients) {
+    const history = healthMemory.getConversationHistory(p.id, 1000);
+    totalAIQueries += history ? history.filter((m) => m.role === 'user').length : 0;
+  }
+
+  // Patients monitored (have ≥1 assessment)
+  const monitoredPatientIds = new Set(allAssessments.map((a) => a.patientId));
+
+  const analytics = {
+    patients: {
+      total:       allPatients.length,
+      monitored:   monitoredPatientIds.size,
+      unmonitored: allPatients.length - monitoredPatientIds.size,
+    },
+    risk: {
+      high:   allAssessments.filter((a) => a.riskLevel === 'high').length,
+      medium: allAssessments.filter((a) => a.riskLevel === 'medium').length,
+      low:    allAssessments.filter((a) => a.riskLevel === 'low').length,
+      highToday:   todayAssessments.filter((a) => a.riskLevel === 'high').length,
+      mediumToday: todayAssessments.filter((a) => a.riskLevel === 'medium').length,
+    },
+    assessments: {
+      total:     allAssessments.length,
+      today:     todayAssessments.length,
+      yesterday: yesterdayAssessments.length,
+      thisWeek:  weekAssessments.length,
+    },
+    alerts: {
+      total:   allAssessments.filter((a) => a.riskLevel === 'high' || a.riskLevel === 'medium').length,
+      today:   todayAssessments.filter((a) => a.riskLevel === 'high' || a.riskLevel === 'medium').length,
+      critical: allAssessments.filter((a) => a.riskLevel === 'high').length,
+    },
+    medications: {
+      avgAdherence,
+      patientsTracked: adherenceCount,
+    },
+    aiQueries: {
+      total: totalAIQueries,
+    },
+    system: {
+      autoSimEnabled,
+      batchSize: AUTO_SIM_BATCH_SIZE,
+      intervalMs: AUTO_SIM_INTERVAL_MS,
+      uptime: process.uptime(),
+    },
+    generatedAt: new Date().toISOString(),
+  };
+
+  res.json({ success: true, data: analytics });
+});
+
+// ─── ADMIN: AUDIT LOG ────────────────────────────────────────────────────────
+
+router.get('/admin/audit', (req: Request, res: Response) => {
+  const limit  = Math.min(parseInt((req.query.limit as string) || '100', 10), 500);
+  const type   = req.query.type as string | undefined;
+
+  const allAssessments = healthMemory.getAllAssessments();
+  const allPatients    = healthMemory.getAllPatients();
+
+  type AuditEvent = {
+    id: string;
+    timestamp: string;
+    type: 'risk_assessment' | 'caregiver_alert' | 'ai_query' | 'patient_registered';
+    patientId: string;
+    patientName: string;
+    severity: 'info' | 'warning' | 'critical';
+    description: string;
+    metadata?: Record<string, unknown>;
+  };
+
+  const events: AuditEvent[] = [];
+
+  // Risk assessments → audit events
+  for (const a of allAssessments) {
+    const patient = healthMemory.getPatient(a.patientId);
+    const name    = patient?.name ?? a.patientId;
+
+    events.push({
+      id: `assess-${a.id}`,
+      timestamp: a.timestamp,
+      type: 'risk_assessment',
+      patientId: a.patientId,
+      patientName: name,
+      severity: a.riskLevel === 'high' ? 'critical' : a.riskLevel === 'medium' ? 'warning' : 'info',
+      description: `Risk assessment: ${a.riskLevel.toUpperCase()} (score ${a.riskScore}/100) — ${a.geminiReasoning.substring(0, 100)}`,
+      metadata: { riskLevel: a.riskLevel, riskScore: a.riskScore, reasons: a.reasons },
+    });
+
+    // High/medium → caregiver alert event
+    if (a.riskLevel === 'high' || a.riskLevel === 'medium') {
+      events.push({
+        id: `alert-${a.id}`,
+        timestamp: a.timestamp,
+        type: 'caregiver_alert',
+        patientId: a.patientId,
+        patientName: name,
+        severity: a.riskLevel === 'high' ? 'critical' : 'warning',
+        description: `Caregiver alert dispatched (SMS + Email) for ${name} — ${a.riskLevel} risk detected`,
+        metadata: { caregiver: patient?.caregiver, riskLevel: a.riskLevel },
+      });
+    }
+  }
+
+  // AI clinical queries → audit events
+  for (const p of allPatients) {
+    const history = healthMemory.getConversationHistory(p.id, 50);
+    if (!history) continue;
+    for (const msg of history) {
+      if (msg.role !== 'user') continue;
+      events.push({
+        id: `query-${msg.id}`,
+        timestamp: msg.timestamp,
+        type: 'ai_query',
+        patientId: p.id,
+        patientName: p.name,
+        severity: 'info',
+        description: `Clinical query: "${msg.content.substring(0, 100)}"`,
+        metadata: { query: msg.content },
+      });
+    }
+  }
+
+  // Patient registrations
+  for (const p of allPatients) {
+    if ((p as any).createdAt) {
+      events.push({
+        id: `reg-${p.id}`,
+        timestamp: (p as any).createdAt,
+        type: 'patient_registered',
+        patientId: p.id,
+        patientName: p.name,
+        severity: 'info',
+        description: `Patient registered: ${p.name}, ${p.age}y — conditions: ${p.conditions.join(', ') || 'none'}`,
+        metadata: { age: p.age, gender: p.gender, conditions: p.conditions },
+      });
+    }
+  }
+
+  // Sort newest first, filter by type, limit
+  let result = events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  if (type) result = result.filter((e) => e.type === type);
+  result = result.slice(0, limit);
+
+  res.json({ success: true, data: result, total: events.length });
+});
+
+// ─── ADMIN: BULK SIMULATE ────────────────────────────────────────────────────
+
+router.post('/admin/simulate-bulk', async (req: Request, res: Response) => {
+  try {
+    const count    = Math.min(parseInt(req.body?.count || '10', 10), 50);
+    const scenario = (req.body?.scenario as 'normal' | 'warning' | 'critical' | 'mixed') || 'mixed';
+
+    const patients = healthMemory.getAllPatients();
+    const shuffled = [...patients].sort(() => Math.random() - 0.5).slice(0, count);
+
+    const scenarios = {
+      normal:   { heartRate: 72, sleepHours: 7, movementScore: 65, bloodPressure: { systolic: 125, diastolic: 82 }, oxygenSaturation: 97,   temperature: 36.8 },
+      warning:  { heartRate: 105, sleepHours: 4.5, movementScore: 28, bloodPressure: { systolic: 158, diastolic: 98 }, oxygenSaturation: 94, temperature: 37.4 },
+      critical: { heartRate: 128, sleepHours: 2.5, movementScore: 8, bloodPressure: { systolic: 178, diastolic: 112 }, oxygenSaturation: 88, temperature: 38.2 },
+    };
+
+    const results: Array<{ patientId: string; patientName: string; scenario: string; riskLevel: string; riskScore: number }> = [];
+
+    for (const p of shuffled) {
+      try {
+        const pickedScenario = scenario === 'mixed'
+          ? (['normal', 'normal', 'warning', 'critical'] as const)[Math.floor(Math.random() * 4)]
+          : scenario;
+        const reading = scenarios[pickedScenario];
+        const assessment = await runRiskAssessment(p.id, reading);
+        if (assessment.riskLevel === 'medium' || assessment.riskLevel === 'high') {
+          await runEmergencyActions(p.id, assessment.riskLevel, assessment.riskScore, assessment.reasons, assessment.recommendations);
+        }
+        results.push({ patientId: p.id, patientName: p.name, scenario: pickedScenario, riskLevel: assessment.riskLevel, riskScore: assessment.riskScore });
+      } catch {
+        // skip individual failures
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        processed: results.length,
+        requested: count,
+        results,
+        highCount: results.filter((r) => r.riskLevel === 'high').length,
+        mediumCount: results.filter((r) => r.riskLevel === 'medium').length,
+        lowCount: results.filter((r) => r.riskLevel === 'low').length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 export default router;
+

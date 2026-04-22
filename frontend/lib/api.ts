@@ -183,6 +183,37 @@ export interface WeeklyReport {
 }
 
 
+export interface AdminAnalytics {
+  patients: { total: number; monitored: number; unmonitored: number };
+  risk: { high: number; medium: number; low: number; highToday: number; mediumToday: number };
+  assessments: { total: number; today: number; yesterday: number; thisWeek: number };
+  alerts: { total: number; today: number; critical: number };
+  medications: { avgAdherence: number; patientsTracked: number };
+  aiQueries: { total: number };
+  system: { autoSimEnabled: boolean; batchSize: number; intervalMs: number; uptime: number };
+  generatedAt: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  type: 'risk_assessment' | 'caregiver_alert' | 'ai_query' | 'patient_registered';
+  patientId: string;
+  patientName: string;
+  severity: 'info' | 'warning' | 'critical';
+  description: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BulkSimResult {
+  processed: number;
+  requested: number;
+  results: Array<{ patientId: string; patientName: string; scenario: string; riskLevel: string; riskScore: number }>;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+}
+
 export const api = {
   // Patients
   getPatients: () => request<Patient[]>('/api/health/patients'),
@@ -253,6 +284,16 @@ export const api = {
       '/api/health/demo-alert',
       { method: 'POST' }
     ),
+
+  // Admin
+  getAdminAnalytics: () => request<AdminAnalytics>('/api/health/admin/analytics'),
+  getAuditLog: (limit = 100, type?: string) =>
+    request<AuditEvent[]>(`/api/health/admin/audit?limit=${limit}${type ? `&type=${type}` : ''}`),
+  simulateBulk: (count: number, scenario: 'normal' | 'warning' | 'critical' | 'mixed') =>
+    request<BulkSimResult>('/api/health/admin/simulate-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ count, scenario }),
+    }),
 
   // Companion
   chat: (patientId: string, message: string, sessionType?: string, language?: 'en' | 'bm') =>
