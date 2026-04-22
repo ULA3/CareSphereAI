@@ -1,6 +1,6 @@
 /**
  * CareSphere AI - Backend Server
- * Firebase Genkit + Gemini AI for elderly health monitoring
+ * Firebase Genkit + Gemini 2.5 Flash for elderly health monitoring
  * Track 3: Vital Signs (Healthcare & Wellbeing) — Project 2030 MyAI Future Hackathon
  */
 
