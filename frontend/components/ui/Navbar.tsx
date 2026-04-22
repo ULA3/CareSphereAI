@@ -39,7 +39,29 @@ export default function Navbar() {
       .catch(() => setProfileLoaded(true));
   }, []);
 
-  // Fetch alerts when bell opens
+  const [hasHighAlert, setHasHighAlert] = useState(false);
+
+  // Background poll every 60s to know if red dot should show
+  useEffect(() => {
+    const check = () => {
+      api.getAllAssessments()
+        .then((assessments) => {
+          const high = assessments.filter((a) => a.riskLevel === 'high');
+          setHasHighAlert(high.length > 0);
+          if (!bellOpen) setRecentAlerts(
+            assessments
+              .filter((a) => a.riskLevel === 'high' || a.riskLevel === 'medium')
+              .slice(0, 5)
+          );
+        })
+        .catch(() => {});
+    };
+    check();
+    const iv = setInterval(check, 60000);
+    return () => clearInterval(iv);
+  }, [bellOpen]);
+
+  // Refresh list when bell opens
   useEffect(() => {
     if (!bellOpen) return;
     setBellLoading(true);
@@ -221,11 +243,8 @@ export default function Navbar() {
             className="relative w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
           >
             <Bell className="w-4.5 h-4.5 text-slate-600 dark:text-slate-300" />
-            {recentAlerts.some((a) => a.riskLevel === 'high') && (
+            {hasHighAlert && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-800 animate-pulse" />
-            )}
-            {!bellOpen && recentAlerts.length === 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-800" />
             )}
           </button>
 

@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 export default function AlertsPage() {
   const [assessments, setAssessments] = useState<RiskAssessment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('high');
 
   const fetchAssessments = useCallback(async () => {
     setLoading(true);
@@ -36,11 +36,11 @@ export default function AlertsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Alert Center</h1>
-          <p className="text-slate-500 text-sm mt-1">Autonomous AI agent actions & risk assessments</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Alert Center</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Autonomous AI agent actions & risk assessments</p>
         </div>
         <button onClick={fetchAssessments}
-          className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors">
+          className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -110,8 +110,8 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
   const isMedium = assessment.riskLevel === 'medium';
 
   return (
-    <div className={`bg-white rounded-xl border shadow-card p-4 transition-all ${
-      isHigh ? 'border-red-200' : isMedium ? 'border-amber-200' : 'border-slate-200'
+    <div className={`bg-white dark:bg-slate-800 rounded-xl border shadow-card p-4 transition-all ${
+      isHigh ? 'border-red-200 dark:border-red-800' : isMedium ? 'border-amber-200 dark:border-amber-800' : 'border-slate-200 dark:border-slate-700'
     }`}>
       <div className="flex items-start justify-between gap-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div className="flex items-start gap-3 flex-1">
@@ -124,7 +124,7 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <p className="font-semibold text-slate-900 text-sm">Patient ID: {assessment.patientId.replace('patient-', 'P-')}</p>
+              <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Patient ID: {assessment.patientId.replace('patient-', 'P-')}</p>
               <RiskBadge level={assessment.riskLevel} score={assessment.riskScore} size="sm" />
               {isHigh && (
                 <span className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -132,10 +132,10 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
                 </span>
               )}
             </div>
-            <p className="text-slate-400 text-xs mt-1">
+            <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">
               {format(new Date(assessment.timestamp), 'dd MMM yyyy, HH:mm:ss')}
             </p>
-            <p className="text-slate-600 text-sm mt-2 line-clamp-2">{assessment.geminiReasoning}</p>
+            <p className="text-slate-600 dark:text-slate-300 text-sm mt-2 line-clamp-2">{assessment.geminiReasoning}</p>
           </div>
         </div>
         <span className="text-slate-400 text-sm shrink-0">{expanded ? '▲' : '▼'}</span>
@@ -145,10 +145,10 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
         <div className="mt-4 space-y-4 border-t border-slate-100 pt-4 animate-slide-up">
           {/* Risk Reasons */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Risk Factors</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">Risk Factors</p>
             <ul className="space-y-1">
               {assessment.reasons.map((r, i) => (
-                <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
+                <li key={i} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
                   <span className="text-red-500 mt-0.5">•</span> {r}
                 </li>
               ))}
@@ -157,10 +157,10 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
 
           {/* Recommendations */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">AI Recommendations</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">AI Recommendations</p>
             <ul className="space-y-1">
               {assessment.recommendations.map((r, i) => (
-                <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
+                <li key={i} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
                   <CheckCircle className="w-3.5 h-3.5 text-green-600 shrink-0 mt-0.5" /> {r}
                 </li>
               ))}
@@ -169,7 +169,7 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
 
           {/* Vitals at time of alert */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Vitals at Alert Time</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">Vitals at Alert Time</p>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { label: 'Heart Rate', value: `${assessment.healthReading.heartRate} bpm` },
@@ -179,9 +179,9 @@ function AlertCard({ assessment }: { assessment: RiskAssessment }) {
                 { label: 'Movement', value: `${assessment.healthReading.movementScore.toFixed(0)}/100` },
                 { label: 'Temperature', value: `${assessment.healthReading.temperature.toFixed(1)}°C` },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-slate-50 rounded-lg p-2 text-center border border-slate-100">
-                  <p className="text-slate-900 text-sm font-semibold">{value}</p>
-                  <p className="text-slate-500 text-xs">{label}</p>
+                <div key={label} className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-600">
+                  <p className="text-slate-900 dark:text-slate-100 text-sm font-semibold">{value}</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">{label}</p>
                 </div>
               ))}
             </div>
