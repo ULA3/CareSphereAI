@@ -182,28 +182,36 @@ export interface WeeklyReport {
   nextReviewDate: string;
 }
 
-export interface DeviceStatus {
-  deviceId: string;
-  patientId: string;
-  deviceType: string;
-  model: string;
-  patient: Patient | undefined;
-  lastSeen: string | null;
-  readingCount: number;
-  status: 'online' | 'idle' | 'never_connected';
+
+export interface AdminAnalytics {
+  patients: { total: number; monitored: number; unmonitored: number };
+  risk: { high: number; medium: number; low: number; highToday: number; mediumToday: number };
+  assessments: { total: number; today: number; yesterday: number; thisWeek: number };
+  alerts: { total: number; today: number; critical: number };
+  medications: { avgAdherence: number; patientsTracked: number };
+  aiQueries: { total: number };
+  system: { autoSimEnabled: boolean; batchSize: number; intervalMs: number; uptime: number };
+  generatedAt: string;
 }
 
-export interface DeviceReadingResult {
-  deviceId: string;
-  deviceType: string;
-  model: string;
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  type: 'risk_assessment' | 'caregiver_alert' | 'ai_query' | 'patient_registered';
+  patientId: string;
   patientName: string;
-  readingReceived: HealthReading;
-  assessment: RiskAssessment;
-  anomalies: string[];
-  agentActionsTriggered: boolean;
-  agentActions: unknown;
-  processedAt: string;
+  severity: 'info' | 'warning' | 'critical';
+  description: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BulkSimResult {
+  processed: number;
+  requested: number;
+  results: Array<{ patientId: string; patientName: string; scenario: string; riskLevel: string; riskScore: number }>;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
 }
 
 export const api = {
@@ -258,17 +266,6 @@ export const api = {
   getWeeklyReport: (patientId: string) =>
     request<WeeklyReport>(`/api/health/patients/${patientId}/report/weekly`),
 
-  // Devices
-  getDevices: () => request<DeviceStatus[]>('/api/devices'),
-  sendDeviceReading: (deviceId: string, reading: Partial<{
-    heartRate: number; oxygenSaturation: number; temperature: number;
-    bloodPressure: { systolic: number; diastolic: number };
-    sleepHours: number; movementScore: number; glucoseLevel: number;
-  }>) =>
-    request<DeviceReadingResult>(`/api/devices/${deviceId}/reading`, {
-      method: 'POST', body: JSON.stringify(reading),
-    }),
-
   // Patients — create
   createPatient: (data: {
     name: string; age: number; gender: string;
@@ -287,6 +284,16 @@ export const api = {
       '/api/health/demo-alert',
       { method: 'POST' }
     ),
+
+  // Admin
+  getAdminAnalytics: () => request<AdminAnalytics>('/api/health/admin/analytics'),
+  getAuditLog: (limit = 100, type?: string) =>
+    request<AuditEvent[]>(`/api/health/admin/audit?limit=${limit}${type ? `&type=${type}` : ''}`),
+  simulateBulk: (count: number, scenario: 'normal' | 'warning' | 'critical' | 'mixed') =>
+    request<BulkSimResult>('/api/health/admin/simulate-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ count, scenario }),
+    }),
 
   // Companion
   chat: (patientId: string, message: string, sessionType?: string, language?: 'en' | 'bm') =>

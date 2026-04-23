@@ -16,6 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "firebase-admin": "^13.8.0",
     "genkit": "^1.1.0",
     "twilio": "^5.13.1",
     "uuid": "^10.0.0",

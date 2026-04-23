@@ -2,19 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import {
-  LayoutDashboard, MessageCircle, Bell, TrendingUp, MapPin,
-  Pill, Users, FileText, Cpu, UserPlus, ChevronRight,
-  Activity, Zap, Brain,
+  LayoutDashboard, Bell, TrendingUp, MapPin,
+  Pill, Users, FileText, UserPlus, ChevronRight,
+  Activity, Zap, Brain, Shield, ClipboardList,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { api } from '@/lib/api';
 
 interface NavItem {
   href: string;
   icon: React.ElementType;
   key?: string;
   label?: string;
-  badge?: boolean;
 }
 
 interface NavGroup {
@@ -27,14 +28,14 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Overview',
     items: [
       { href: '/',          icon: LayoutDashboard, key: 'dashboard' },
-      { href: '/alerts',    icon: Bell,            key: 'alerts', badge: true },
-      { href: '/trends',    icon: TrendingUp,      key: 'trends' },
+      { href: '/alerts',    icon: Bell,            key: 'alerts' },
+      { href: '/trends',    icon: TrendingUp,      label: 'Vital Monitoring' },
     ],
   },
   {
     label: 'Patient Care',
     items: [
-      { href: '/companion',  icon: MessageCircle, key: 'aiCompanion' },
+      { href: '/companion',  icon: Brain,         label: 'AI Clinical Assistant' },
       { href: '/caregiver',  icon: Users,         key: 'caregiver' },
       { href: '/medications',icon: Pill,          key: 'medications' },
     ],
@@ -44,8 +45,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/hospitals', icon: MapPin,   key: 'hospitals' },
       { href: '/report',    icon: FileText, key: 'weeklyReport' },
-      { href: '/devices',   icon: Cpu,      label: 'Device Monitor' },
       { href: '/onboard',   icon: UserPlus, label: 'Add Patient' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { href: '/admin', icon: Shield,        label: 'Admin Centre' },
+      { href: '/audit', icon: ClipboardList, label: 'Audit Log' },
     ],
   },
 ];
@@ -53,6 +60,21 @@ const NAV_GROUPS: NavGroup[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  const [hasHighAlert, setHasHighAlert] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const today = new Date().toISOString().split('T')[0];
+      api.getAllAssessments()
+        .then((assessments) => {
+          setHasHighAlert(assessments.some((a) => a.riskLevel === 'high' && a.timestamp.startsWith(today)));
+        })
+        .catch(() => {});
+    };
+    check();
+    const iv = setInterval(check, 60000);
+    return () => clearInterval(iv);
+  }, []);
 
   const getLabel = (item: NavItem) => {
     if (item.key) {
@@ -89,10 +111,8 @@ export default function Sidebar() {
                     >
                       <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-brand-500' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
                       <span className="flex-1 truncate">{itemLabel}</span>
-                      {badge && (
-                        <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0 animate-pulse">
-                          !
-                        </span>
+                      {href === '/alerts' && hasHighAlert && (
+                        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse" />
                       )}
                       {active && <ChevronRight className="w-3.5 h-3.5 text-brand-400 shrink-0" />}
                     </Link>
