@@ -1,201 +1,297 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MapPin, Phone, Clock, AlertCircle, ChevronDown, Building2, Ambulance } from 'lucide-react';
-import { api, HospitalData, Patient } from '@/lib/api';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { MapPin, Phone, AlertTriangle, Building2, Ambulance, ChevronDown, ExternalLink, Clock, RefreshCw } from 'lucide-react';
+import { api, HospitalData, Patient, RiskAssessment } from '@/lib/api';
+
+interface HighRiskPatient {
+  patient: Patient;
+  assessment: RiskAssessment;
+}
 
 const CITY_COORDS: Record<string, [number, number]> = {
-  'Kuala Lumpur': [3.1390, 101.6869],
-  'Petaling Jaya': [3.1073, 101.6067],
-  'Shah Alam': [3.0738, 101.5183],
-  'Subang Jaya': [3.0497, 101.5851],
-  'Klang': [3.0449, 101.4459],
-  'Johor Bahru': [1.4927, 103.7414],
-  'Ipoh': [4.5975, 101.0901],
-  'Penang': [5.4141, 100.3288],
-  'George Town': [5.4141, 100.3288],
-  'Kota Bharu': [6.1248, 102.2381],
-  'Kuching': [1.5533, 110.3592],
-  'Kota Kinabalu': [5.9804, 116.0735],
-  'Alor Setar': [6.1248, 100.3673],
-  'Seremban': [2.7260, 101.9424],
-  'Melaka': [2.1896, 102.2501],
-  'Kuantan': [3.8077, 103.3260],
-  'Putrajaya': [2.9264, 101.6964],
-  'Cyberjaya': [2.9213, 101.6559],
-  'Ampang': [3.1478, 101.7489],
-  'Cheras': [3.0835, 101.7330],
+  'Kuala Lumpur': [3.1390, 101.6869], 'Petaling Jaya': [3.1073, 101.6067],
+  'Shah Alam': [3.0738, 101.5183],    'Subang Jaya': [3.0497, 101.5851],
+  'Klang': [3.0449, 101.4459],        'Johor Bahru': [1.4927, 103.7414],
+  'Ipoh': [4.5975, 101.0901],         'Penang': [5.4141, 100.3288],
+  'George Town': [5.4141, 100.3288],  'Kota Bharu': [6.1248, 102.2381],
+  'Kuching': [1.5533, 110.3592],      'Kota Kinabalu': [5.9804, 116.0735],
+  'Alor Setar': [6.1248, 100.3673],   'Seremban': [2.7260, 101.9424],
+  'Melaka': [2.1896, 102.2501],       'Kuantan': [3.8077, 103.3260],
+  'Putrajaya': [2.9264, 101.6964],    'Cyberjaya': [2.9213, 101.6559],
 };
 
 export default function HospitalsPage() {
-  const { t } = useLanguage();
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [highRiskPatients, setHighRiskPatients] = useState<HighRiskPatient[]>([]);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [hospitalData, setHospitalData] = useState<HospitalData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hospitalLoading, setHospitalLoading] = useState(false);
 
-  useEffect(() => {
-    api.getPatients().then((ps) => {
-      setPatients(ps);
-      if (ps.length > 0) {
-        setSelectedPatientId(ps[0].id);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [patients, assessments] = await Promise.all([
+        api.getPatients(),
+        api.getAllAssessments(),
+      ]);
+      setAllPatients(patients);
+
+      // Find distinct high-risk patients from recent assessments
+      const seen = new Set<string>();
+      const highRisk: HighRiskPatient[] = [];
+      for (const a of assessments) {
+        if (a.riskLevel === 'high' && !seen.has(a.patientId)) {
+          const patient = patients.find((p) => p.id === a.patientId);
+          if (patient) {
+            seen.add(a.patientId);
+            highRisk.push({ patient, assessment: a });
+          }
+        }
+        if (highRisk.length >= 8) break;
       }
-    });
-  }, []);
+      setHighRiskPatients(highRisk);
+
+      // Default select: first high-risk patient, or first patient overall
+      const defaultId = highRisk[0]?.patient.id || patients[0]?.id || '';
+      setSelectedPatientId(defaultId);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
     if (!selectedPatientId) return;
-    setLoading(true);
+    setHospitalLoading(true);
+    setHospitalData(null);
     api.getHospitals(selectedPatientId)
       .then(setHospitalData)
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => setHospitalLoading(false));
   }, [selectedPatientId]);
+
+  const selectedPatient = allPatients.find((p) => p.id === selectedPatientId);
+  const selectedRisk    = highRiskPatients.find((r) => r.patient.id === selectedPatientId);
 
   return (
     <div className="space-y-5 animate-fade-in">
+
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t.hospitals}</h1>
-          <p className="text-slate-500 mt-1 text-sm">Nearby Malaysian hospitals and emergency facilities</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Ambulance className="w-6 h-6 text-red-500" />
+            Emergency Referral
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            Identify the nearest hospital for high-risk patients — pre-loaded with patient medical summary
+          </p>
         </div>
-        <div className="relative">
-          <select
-            value={selectedPatientId}
-            onChange={(e) => setSelectedPatientId(e.target.value)}
-            className="appearance-none border border-slate-200 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-          >
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} — {p.location.city}</option>
-            ))}
-          </select>
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
+        <button onClick={loadData} className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700 transition-colors">
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-500 rounded-full animate-spin" />
-        </div>
-      ) : hospitalData ? (
-        <>
-          {/* Emergency Banner */}
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-              <Ambulance className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <p className="font-semibold text-red-700">Emergency Contact: {hospitalData.emergencyContact}</p>
-              <p className="text-sm text-red-600">
-                Recommended: <span className="font-semibold">{hospitalData.recommendedHospital}</span> · Est. travel: {hospitalData.estimatedTravelTime}
-              </p>
-            </div>
-          </div>
+        <div className="text-center py-12 text-slate-400">Loading patient data…</div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5">
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Hospital List */}
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-teal-600" />
-                Nearby Hospitals ({hospitalData.patientCity}, {hospitalData.patientState})
-              </h2>
-              {hospitalData.hospitals.map((hospital, idx) => (
-                <div
-                  key={hospital.id}
-                  className={`bg-white rounded-xl border shadow-card p-4 transition-all hover:scale-[1.01] ${
-                    idx === 0 ? 'border-teal-200' : 'border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {idx === 0 && (
-                          <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full font-semibold">
-                            Recommended
-                          </span>
-                        )}
-                        <h3 className="font-semibold text-slate-900 text-sm">{hospital.name}</h3>
+          {/* Left: High-risk patient list */}
+          <div className="space-y-3">
+            {/* High-risk patients */}
+            {highRiskPatients.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card overflow-hidden">
+                <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+                  <p className="text-xs font-bold text-red-700 dark:text-red-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" /> HIGH RISK — Referral Needed
+                  </p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {highRiskPatients.map(({ patient, assessment }) => (
+                    <button
+                      key={patient.id}
+                      onClick={() => setSelectedPatientId(patient.id)}
+                      className={`w-full text-left px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors ${
+                        selectedPatientId === patient.id ? 'bg-red-50 dark:bg-red-900/10' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{patient.name}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{patient.age}y · {patient.location.city}</p>
+                          <p className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 font-medium">
+                            Score {assessment.riskScore}/100
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-1 rounded-full">HIGH</span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">{hospital.address}, {hospital.city}</p>
-                    </div>
-                    {hospital.emergencyAvailable && (
-                      <span className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full shrink-0">
-                        24h A&E
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-teal-600" />
-                      {hospital.distance}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-brand-500" />
-                      {hospital.type}
-                    </span>
-                    <a href={`tel:${hospital.phone}`} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 transition-colors ml-auto">
-                      <Phone className="w-3 h-3" />
-                      {hospital.phone}
-                    </a>
-                  </div>
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
-            {/* Map Panel */}
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-brand-500" />
-                Hospital Map
-              </h2>
-
-              {/* OpenStreetMap iframe */}
-              {(() => {
-                const coords = CITY_COORDS[hospitalData.patientCity] || [3.1390, 101.6869];
-                const [lat, lng] = coords;
-                const delta = 0.05;
-                const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
-                const osmUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
-                return (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden" style={{ height: '420px' }}>
-                    <iframe
-                      src={osmUrl}
-                      width="100%"
-                      height="100%"
-                      style={{ border: 'none', display: 'block' }}
-                      title={`Map of ${hospitalData.patientCity}`}
-                      loading="lazy"
-                    />
-                  </div>
-                );
-              })()}
-              <a
-                href={`https://www.openstreetmap.org/search?query=hospital+${encodeURIComponent(hospitalData.patientCity + ' Malaysia')}`}
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium mt-2"
-              >
-                <MapPin className="w-3.5 h-3.5" /> Open full map →
-              </a>
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 text-amber-700 mb-2">
-                  <AlertCircle className="w-4 h-4" />
-                  <p className="text-sm font-semibold">Emergency Protocol</p>
-                </div>
-                <ul className="text-xs text-amber-700/80 space-y-1">
-                  <li>• Call <span className="text-red-700 font-semibold">999</span> for life-threatening emergencies</li>
-                  <li>• Hospital emergency line: <span className="text-teal-700">{hospitalData.emergencyContact}</span></li>
-                  <li>• Alert caregiver immediately before hospital transport</li>
-                  <li>• Bring medication list to A&E department</li>
-                  <li>• CareSphere AI has pre-prepared patient medical summary</li>
-                </ul>
+            {/* All patients dropdown for manual selection */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card p-4">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Find Hospital for Any Patient</p>
+              <div className="relative">
+                <select
+                  value={selectedPatientId}
+                  onChange={(e) => setSelectedPatientId(e.target.value)}
+                  className="w-full appearance-none border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                >
+                  {allPatients.slice(0, 50).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} — {p.location.city}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
           </div>
-        </>
-      ) : (
-        <div className="text-center py-12 text-slate-400">{t.noData}</div>
+
+          {/* Right: Hospital details + map */}
+          <div className="space-y-4">
+
+            {/* Selected patient info */}
+            {selectedPatient && (
+              <div className={`rounded-xl border p-4 ${
+                selectedRisk
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedRisk ? 'bg-red-100 dark:bg-red-900/40' : 'bg-slate-100 dark:bg-slate-700'
+                  }`}>
+                    <Ambulance className={`w-4 h-4 ${selectedRisk ? 'text-red-600' : 'text-slate-500'}`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`font-bold text-sm ${selectedRisk ? 'text-red-700 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                      {selectedRisk ? 'URGENT: ' : ''}{selectedPatient.name}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {selectedPatient.age}y · {selectedPatient.conditions.join(', ')} · {selectedPatient.location.city}, {selectedPatient.location.state}
+                    </p>
+                    {selectedRisk && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-medium">
+                        Risk score {selectedRisk.assessment.riskScore}/100 — caregiver: {selectedPatient.caregiver.name} ({selectedPatient.caregiver.phone})
+                      </p>
+                    )}
+                  </div>
+                  {selectedRisk && (
+                    <a href={`tel:${selectedPatient.caregiver.phone}`}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors">
+                      <Phone className="w-3.5 h-3.5" /> Call Caregiver
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {hospitalLoading ? (
+              <div className="text-center py-12 text-slate-400">Finding nearest hospitals…</div>
+            ) : hospitalData ? (
+              <>
+                {/* Emergency banner */}
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                    <Phone className="w-4 h-4 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-red-700 dark:text-red-400">Emergency: {hospitalData.emergencyContact}</p>
+                    <p className="text-xs text-red-600/80 dark:text-red-400/80">
+                      Recommended: <span className="font-semibold">{hospitalData.recommendedHospital}</span> · {hospitalData.estimatedTravelTime} travel
+                    </p>
+                  </div>
+                  <a href="tel:999" className="shrink-0 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors">
+                    Call 999
+                  </a>
+                </div>
+
+                {/* Hospitals grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {hospitalData.hospitals.map((hospital, idx) => (
+                    <div key={hospital.id} className={`bg-white dark:bg-slate-800 rounded-xl border shadow-card p-4 ${
+                      idx === 0 ? 'border-teal-300 dark:border-teal-700' : 'border-slate-200 dark:border-slate-700'
+                    }`}>
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div>
+                          {idx === 0 && (
+                            <span className="text-[10px] font-bold bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-700 px-2 py-0.5 rounded-full mb-1 inline-block">
+                              RECOMMENDED
+                            </span>
+                          )}
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{hospital.name}</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{hospital.address}</p>
+                        </div>
+                        {hospital.emergencyAvailable && (
+                          <span className="text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-2 py-0.5 rounded-full shrink-0">
+                            24h A&E
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-teal-500" /> {hospital.distance}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-brand-500" /> {hospital.type}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <a href={`tel:${hospital.phone}`}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-700 rounded-lg text-xs font-medium hover:bg-teal-100 transition-colors">
+                          <Phone className="w-3 h-3" /> {hospital.phone}
+                        </a>
+                        <a
+                          href={`https://www.google.com/maps/search/${encodeURIComponent(hospital.name + ' ' + hospital.city)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="p-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-500 hover:text-brand-600 transition-colors">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Map */}
+                {(() => {
+                  const coords = CITY_COORDS[hospitalData.patientCity] || [3.1390, 101.6869];
+                  const [lat, lng] = coords;
+                  const delta = 0.05;
+                  const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
+                  return (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-brand-500" />
+                          Hospitals near {hospitalData.patientCity}
+                        </p>
+                        <a
+                          href={`https://www.openstreetmap.org/search?query=hospital+${encodeURIComponent(hospitalData.patientCity + ' Malaysia')}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[11px] text-brand-600 hover:underline flex items-center gap-1">
+                          Open full map <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                      <iframe
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`}
+                        width="100%" height="300"
+                        style={{ border: 'none', display: 'block' }}
+                        title={`Map of ${hospitalData.patientCity}`}
+                        loading="lazy"
+                      />
+                    </div>
+                  );
+                })()}
+              </>
+            ) : null}
+          </div>
+        </div>
       )}
     </div>
   );

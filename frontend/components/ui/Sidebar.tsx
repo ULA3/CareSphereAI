@@ -28,7 +28,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/',          icon: LayoutDashboard, key: 'dashboard' },
       { href: '/alerts',    icon: Bell,            key: 'alerts', badge: true },
-      { href: '/trends',    icon: TrendingUp,      key: 'trends' },
+      { href: '/trends',    icon: TrendingUp,      label: 'Vital Monitoring' },
     ],
   },
   {

@@ -46,8 +46,11 @@ export default function Navbar() {
     const check = () => {
       api.getAllAssessments()
         .then((assessments) => {
-          const high = assessments.filter((a) => a.riskLevel === 'high');
-          setHasHighAlert(high.length > 0);
+          const today = new Date().toISOString().split('T')[0];
+          const todayHigh = assessments.filter(
+            (a) => a.riskLevel === 'high' && a.timestamp.startsWith(today)
+          );
+          setHasHighAlert(todayHigh.length > 0);
           if (!bellOpen) setRecentAlerts(
             assessments
               .filter((a) => a.riskLevel === 'high' || a.riskLevel === 'medium')
